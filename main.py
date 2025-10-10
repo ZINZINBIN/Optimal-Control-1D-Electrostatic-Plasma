@@ -1,6 +1,7 @@
 import numpy as np
 import os, argparse
 from scipy.io import savemat
+from tqdm.auto import tqdm
 from src.env.pic import PIC
 from src.env.dist import BumpOnTail, TwoStream
 from src.control.actuator import E_field
@@ -12,7 +13,7 @@ def parsing():
     parser.add_argument("--simcase", type = str, default = "two-stream", choices=["two-stream", "bump-on-tail"])
     parser.add_argument("--interpol", type=str, default = "CIC", choices=["CIC", "TSC"])
     parser.add_argument("--gamma", type=float, default=5.0)
-    parser.add_argument("--save_dir", type=str, default="./dataset/")
+    parser.add_argument("--save_file", type=str, default="./dataset/")
     parser.add_argument("--tag", type=str, default="test")
 
     # PIC parameters (default)
@@ -50,7 +51,7 @@ if __name__ == "__main__":
     args = parsing()
 
     tag = args['tag']
-    savepath = os.path.join(args["save_dir"], args['simcase'])
+    savepath = os.path.join(args["save_file"], args['simcase'])
 
     # Directory check
     if not os.path.exists(savepath):
@@ -93,7 +94,7 @@ if __name__ == "__main__":
     coeff_cos = []
     coeff_sin = []
     
-    for idx_t in range(Nt):
+    for idx_t in tqdm(range(Nt), "PIC simulation with E-field control"):
         
         # Update coefficients
         actuator.update_E()
@@ -146,8 +147,4 @@ if __name__ == "__main__":
     }
 
     # save data
-    if args["simcase"] == "two-stream":
-        savemat(file_name = os.path.join(savepath, "{}.mat".format(tag)), mdict=mdic, do_compression=True)
-
-    elif args["simcase"] == "bump-on-tail":
-        savemat(file_name = os.path.join(savepath, "{}.mat".format(tag)), mdict=mdic, do_compression=True)
+    savemat(file_name = os.path.join(savepath, "{}.mat".format(tag)), mdict=mdic, do_compression=True)

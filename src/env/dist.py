@@ -51,6 +51,9 @@ class TwoStream(BasicDistribution):
     def get_sample(self):
         return self.x_init, self.v_init
 
+    def get_init_state(self):
+        return np.concatenate([self.x_init.reshape(-1,1), self.v_init.reshape(-1,1)], axis = 0)
+
     def update_params(self, **kwargs):
         for key in kwargs.keys():
             if hasattr(self, key) is True and kwargs[key] is not None:
@@ -76,13 +79,13 @@ class TwoStream(BasicDistribution):
 
             pos += x[u < self.get_target_prob(v, self.v0)].tolist()
             vel += v[u < self.get_target_prob(v, self.v0)].tolist()
-        
+
         pos = pos[:n_samples // 2]
         vel = vel[:n_samples // 2]
 
         # For electrom beam injected via -x direction
         while len(pos) < n_samples:
-            
+
             x = np.random.uniform(0, self.L, size=batch)
             v = np.random.uniform(-10, 10, size=batch)
             u = np.random.uniform(0, 1.0, size=batch)
@@ -127,6 +130,9 @@ class BumpOnTail(BasicDistribution):
 
     def get_sample(self):
         return self.x_init, self.v_init
+    
+    def get_init_state(self):
+        return np.concatenate([self.x_init.reshape(-1,1), self.v_init.reshape(-1,1)], axis = 0)
 
     def update_params(self, **kwargs):
         for key in kwargs.keys():

@@ -8,8 +8,8 @@ import os, pickle
 import numpy as np
 from collections import namedtuple, deque
 from src.env.pic import PIC
+from src.control.rl.reward import Reward
 from src.control.actuator import E_field
-from src.control.objective import estimate_KL_divergence, estimate_f
 
 # transition
 Transition = namedtuple(
@@ -55,16 +55,19 @@ class ReplayBuffer(object):
             self.memory = pickle.load(f)
 
 class ActorCritic(nn.Module):
-    def __init__(self, input_dim : int, mlp_dim : int, n_actions : int, std : float = 0.25, output_min:float = -1.0, output_max:float=1.0):
+    def __init__(self, input_dim : int, mlp_dim : int, n_actions : int, std : float = 0.25, output_min:float = -1.0, output_max:float=1.0, x_norm:float = 50.0, v_norm:float = 10.0):
         super(ActorCritic, self).__init__()
-        
+
         self.input_dim = input_dim
         self.mlp_dim = mlp_dim
         self.n_actions = n_actions
         self.std = std
-        
+
         self.output_min = output_min
         self.output_max = output_max
+
+        self.x_norm = x_norm
+        self.v_norm = v_norm
 
         self.fc1 = nn.Linear(input_dim, mlp_dim)
         self.norm1 = nn.LayerNorm(input_dim)
@@ -84,6 +87,10 @@ class ActorCritic(nn.Module):
         self.max_values = [output_max for _ in range(n_actions)]
 
     def forward(self, x:torch.Tensor):
+
+        x[:,:self.input_dim//2] /= self.x_norm
+        x[:,self.input_dim//2:] /= self.v_norm
+
         x = F.tanh(self.fc1(self.norm1(x)))
         x = F.tanh(self.fc2(self.norm2(x)))
         x = F.tanh(self.fc3(self.norm3(x)))
@@ -110,6 +117,12 @@ class ActorCritic(nn.Module):
         entropy = dist.entropy().mean()
 
         return action, entropy, log_probs, value
+
+    def get_action(self, x:np.ndarray):
+        x = x.ravel()
+        state = torch.from_numpy(x).unsqueeze(0).float()
+        action, _, _, _ = self.sample(state)
+        return action.detach().squeeze(0).cpu().numpy()
 
 # update policy
 def update_policy(
@@ -187,6 +200,8 @@ def train(
     Nt:int = 1000,
     verbose : int = 8,
     save_last : Optional[str] = None,
+    alpha:float = 0.1,
+    beta:float = 0.1
     ):
 
     if device is None:
@@ -194,14 +209,15 @@ def train(
 
     reward_list = []
     loss_list = []
+      
+    reward_cls = Reward(env.init_dist.get_init_state(), env.N_mesh, env.L, -10.0, 10.0, env.n0, alpha, beta)
 
     for i_episode in tqdm(range(num_episode), desc = '# Training PPO controller...'):
 
         # initialize the simulation and actuator setup
         env.reinit()
         actuator.reinit()
-
-        init_state = env.get_state().copy()
+        reward_cls.reinit()
 
         for idx_t in range(Nt):
 
@@ -224,11 +240,11 @@ def train(
             next_state_tensor = torch.from_numpy(next_state).unsqueeze(0).float() 
 
             # compute cost
-            reward = estimate_KL_divergence(estimate_f(state, env.N_mesh, env.L, -10.0, 10.0, 1.0), estimate_f(init_state, env.N_mesh, env.L, -10.0, 10.0, 1.0)) * (-1)
+            reward = reward_cls.compute_reward(state, action)           
             reward_tensor = torch.tensor([reward])
 
             # save trajectory into memory
-            done = False if idx_t < Nt - 1 else True
+            done = False if (-1) * reward < 1e2 and idx_t < Nt - 1 else True
             memory.push(state_tensor, action_tensor, next_state_tensor, reward_tensor, done, log_probs)
 
             # update policy
@@ -251,11 +267,15 @@ def train(
                 # save the weight parameters
                 torch.save(policy_network.state_dict(), save_last)
 
+            if done:
+                print("| episode:{} | simulation terminated with progress: {:.1f} percent".format(i_episode+1, 100 * (idx_t + 1)/Nt))
+                break
+
         if i_episode % verbose == 0:
             print("| episode:{} | loss:{:.4f} | cost:{:.4f}".format(i_episode+1, loss_list[-1], reward * (-1)))
 
     print("# Training PPO controller process complete")
-    
+
     reward = np.array(reward_list)
     loss = np.array(loss_list)
 

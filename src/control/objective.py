@@ -1,5 +1,9 @@
 import numpy as np
+from typing import Optional
+from scipy.special import rel_entr
 from src.env.util import compute_E
+
+eps = 1e-12
 
 def estimate_f(state:np.ndarray, N_mesh:int, L:float, vmin:float, vmax:float, n0:float):
     N = state.shape[0] // 2
@@ -9,17 +13,21 @@ def estimate_f(state:np.ndarray, N_mesh:int, L:float, vmin:float, vmax:float, n0
     dist *= n0 / dx / dv / N
     return dist
 
-def estimate_KL_divergence(f:np.ndarray, feq:np.ndarray, dx:float, dv:float):
+def estimate_KL_divergence(f:np.ndarray, feq:np.ndarray, dx:float = 0.1, dv:float = 0.04):
     mask = (f != 0) & (feq != 0)
-    kl_div = (f[mask] * np.log(f[mask] / feq[mask])).sum() * dx * dv
+    kl_div = np.sum(rel_entr(f[mask], feq[mask] + eps)) * dx * dv
     return kl_div
 
-def estimate_electric_energy(state:np.ndarray, E_external:np.ndarray, N_mesh:int, L:float, n0:float):
+def estimate_electric_energy(state:np.ndarray, E_external:Optional[np.ndarray], N_mesh:int, L:float, n0:float):
     N = state.shape[0] // 2
     x = state[:N]
     dx = L / N_mesh
     _, E_mesh = compute_E(x, dx, N_mesh, n0, L, N, None, None, False, "CIC")
-    E_total = E_mesh + E_external
+    
+    if E_external is not None:
+        E_total = E_mesh + E_external
+    else:
+        E_total = E_mesh
     
     PE = 0.5 * np.sum(E_total * E_total) * dx
     PE *= N / L

@@ -1,5 +1,6 @@
 import numpy as np
 import os, argparse, torch
+from tqdm.auto import tqdm
 from scipy.io import savemat
 from src.env.pic import PIC
 from src.env.dist import BumpOnTail, TwoStream
@@ -13,7 +14,8 @@ def parsing():
     parser.add_argument("--simcase", type = str, default = "two-stream", choices=["two-stream", "bump-on-tail"])
     parser.add_argument("--interpol", type=str, default = "CIC", choices=["CIC", "TSC"])
     parser.add_argument("--gamma", type=float, default=5.0)
-    parser.add_argument("--save_dir", type=str, default="./dataset/")
+    parser.add_argument("--save_plot", type=str, default="./result/")
+    parser.add_argument("--save_file", type=str, default="./dataset/")
     parser.add_argument("--tag", type=str, default="ppo-control")
 
     # PIC parameters (default)
@@ -46,14 +48,18 @@ def parsing():
     parser.add_argument("--coeff_min", type=float, default=-1.0)
 
     # Network
-    parser.add_argument("--mlp_dim", type = int, defautl = 32)
+    parser.add_argument("--mlp_dim", type = int, default = 32)
     parser.add_argument("--std", type = float, default = 0.25)
-    parser.add_argument("--capacity", type=int, default=100)
+    parser.add_argument("--capacity", type=int, default=10)
     parser.add_argument("--eps_clip", type=float, default=0.25)
     parser.add_argument("--entropy_coeff", type=float, default=0.1)
     parser.add_argument("--num_episode", type=int, default=10)
     parser.add_argument("--verbose", type=int, default=10)
-    parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--lr", type=float, default=5e-4)
+
+    # Cost parameters
+    parser.add_argument("--alpha", type=float, default=1e-5)
+    parser.add_argument("--beta", type=float, default=1e-4)
     parser.add_argument("--save_weight", type=str, default="./dataset/ppo.pt")
 
     args = vars(parser.parse_args())
@@ -64,11 +70,15 @@ if __name__ == "__main__":
     args = parsing()
 
     tag = args['tag']
-    savepath = os.path.join(args["save_dir"], args['simcase'])
+    savepath = os.path.join(args["save_plot"], args['simcase'])
+    filepath = os.path.join(args['save_file'], args['simcase'])
 
     # Directory check
     if not os.path.exists(savepath):
         os.makedirs(savepath)
+
+    if not os.path.exists(filepath):
+        os.makedirs(filepath)
 
     if args['simcase'] == "two-stream":
         dist = TwoStream(v0 = args['vb'], sigma = args['vth'], n_samples=args['num_particle'], L = args['L'])
@@ -91,21 +101,22 @@ if __name__ == "__main__":
         interpol=args["interpol"],
         init_dist=dist,
     )
-    
+
     # Actuator
     actuator = E_field(args['L'], args['num_mesh'], args['max_mode'])
-    
+
     # Controller
     input_dim = args['num_particle'] * 2
     n_actions = 2 * args['max_mode']
     network = ActorCritic(input_dim, args['mlp_dim'], n_actions, args['std'], output_min = args['coeff_min'], output_max = args['coeff_max'])
     optimizer = torch.optim.RMSprop(network.parameters(), lr = args['lr'])
 
+    # maximum simulation time (integer)
     Nt = int(np.ceil((args['t_max'] - args['t_min']) / args['dt']))
-    
-    # Optimize
+
+    # Optimize controller
     memory = ReplayBuffer(args['capacity'])
-    
+
     reward, loss = train(
         sim, 
         actuator, 
@@ -120,30 +131,45 @@ if __name__ == "__main__":
         args['num_episode'], 
         Nt, 
         args['verbose'], 
-        args['save_weight']
+        args['save_weight'],
+        args['alpha'],
+        args['beta']
     )
     
+    # save optimization process
+    mdic = {
+        'reward':reward,
+        'loss':loss
+    }
+
+    # save data
+    savemat(file_name = os.path.join(filepath, "optim_{}.mat".format(tag)), mdict=mdic, do_compression=True)
+
     # Trajectory of the system's state
     pos_list = []
     vel_list = []
     E_list = []
     PE_list = []
-    
+
     # Trajectory of the input control
     coeff_cos = []
     coeff_sin = []
     
-    for idx_t in range(Nt):
+    sim.reinit()
+
+    for idx_t in tqdm(range(Nt), "PIC simulation with E-field control"):
         
         # Update coefficients
-        actuator.update_E()
-        
+        state = sim.get_state()
+        coeffs = network.get_action(state)
+        actuator.update_E(coeffs[:args['max_mode']], coeffs[args['max_mode']:])
+
         # Get action
         E_external = actuator.compute_E()
 
         # Update motion
         sim.update_state(E_external)
-    
+
         E = sim.get_energy()
         PE = sim.get_electric_energy()
 
@@ -151,17 +177,17 @@ if __name__ == "__main__":
         vel_list.append(sim.v.copy())
         E_list.append(E)
         PE_list.append(PE)
-        
+
         coeff_cos.append(actuator.coeff_cos.copy())
         coeff_sin.append(actuator.coeff_sin.copy())
-        
+
     qs = np.concatenate(pos_list, axis = 1)
     ps = np.concatenate(vel_list, axis = 1)
     snapshot = np.concatenate([qs, ps], axis=0)
 
     E = np.array(E_list)
     PE = np.array(PE_list)
-    
+
     coeff_cos = np.concatenate(coeff_cos, axis = 1)
     coeff_sin = np.concatenate(coeff_sin, axis = 1)
 
@@ -186,8 +212,4 @@ if __name__ == "__main__":
     }
 
     # save data
-    if args["simcase"] == "two-stream":
-        savemat(file_name = os.path.join(savepath, "{}.mat".format(tag)), mdict=mdic, do_compression=True)
-
-    elif args["simcase"] == "bump-on-tail":
-        savemat(file_name = os.path.join(savepath, "{}.mat".format(tag)), mdict=mdic, do_compression=True)
+    savemat(file_name = os.path.join(filepath, "{}.mat".format(tag)), mdict=mdic, do_compression=True)

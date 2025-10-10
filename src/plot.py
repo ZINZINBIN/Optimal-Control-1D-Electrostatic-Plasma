@@ -8,11 +8,11 @@ from src.interpret.spectrum import compute_E_k_spectrum
 
 def plot_x_dist_snapshot(
     snapshot:np.ndarray,
-    prediction:Optional[np.ndarray],
     save_dir:Optional[str],
     filename:Optional[str],
     xmin:Optional[float] = 0.0,
     xmax:Optional[float] = 50.0,
+    N_mesh:Optional[int] = 500,
 ):
 
     # check directory
@@ -26,44 +26,35 @@ def plot_x_dist_snapshot(
     else:
         filepath = None
 
-    fig, ax = plt.subplots(1, 1, figsize=(6, 4), facecolor="white", dpi=120)
+    fig, ax = plt.subplots(1, 1, figsize=(5, 4), facecolor="white", dpi=120)
 
     # snapshot info
     N = snapshot.shape[0] // 2
 
     # velocity array for plot
-    x = np.linspace(xmin, xmax, 128)
+    x = np.linspace(xmin, xmax, N_mesh)
     density_od = gaussian_kde(snapshot[:N])
 
-    if prediction is not None:
-        density_rd = gaussian_kde(prediction[:N])
-
     ax.cla()
-    ax.plot(x, density_od(x), "b", label = "FOM")
+    ax.plot(x, density_od(x))
     ax.set_xlabel("x")
     ax.set_ylabel(r"$f(x,\cdot)$")
     ax.set_xlim([xmin, xmax])
-
-    if prediction is not None:
-        ax.plot(x, density_rd(x), "r", label = "ROM")
-
     ax.legend(loc="upper right")
     fig.tight_layout()
 
     if filepath is not None:
         plt.savefig(filepath, dpi=120)
-
-    plt.close()
 
     return fig, ax
 
 def plot_v_dist_snapshot(
     snapshot:np.ndarray,
-    prediction:Optional[np.ndarray],
     save_dir:Optional[str],
     filename:Optional[str],
     vmin:Optional[float] = -10.0,
     vmax:Optional[float] = 10.0,
+    N_mesh:Optional[int] = 500,
 ):
 
     # check directory
@@ -77,46 +68,36 @@ def plot_v_dist_snapshot(
     else:
         filepath = None
 
-    fig, ax = plt.subplots(1, 1, figsize=(6, 4), facecolor="white", dpi=120)
+    fig, ax = plt.subplots(1, 1, figsize=(5, 4), facecolor="white", dpi=120)
 
     # snapshot info
     N = snapshot.shape[0] // 2
 
     # velocity array for plot
-    v = np.linspace(vmin, vmax, 128)
+    v = np.linspace(vmin, vmax, N_mesh)
     density_od = gaussian_kde(snapshot[N:])
 
-    if prediction is not None:
-        density_rd = gaussian_kde(prediction[N:])
-
     ax.cla()
-    ax.plot(v, density_od(v), "b", label = "FOM")
+    ax.plot(v, density_od(v))
     ax.set_xlabel("v")
     ax.set_ylabel(r"$f(\cdot,v)$")
     ax.set_xlim([vmin, vmax])
-
-    if prediction is not None:
-        ax.plot(v, density_rd(v), "r", label = "ROM")
-
-    ax.legend(loc="upper right")
     fig.tight_layout()
 
     if filepath is not None:
         plt.savefig(filepath, dpi=120)
-
-    plt.close()
-
+        
     return fig, ax
 
 def plot_dist_snapshot(
     snapshot:np.ndarray,
-    prediction:Optional[np.ndarray],
     save_dir:Optional[str],
     filename:Optional[str],
     xmin:Optional[float] = 0.0,
     xmax:Optional[float] = 50.0,
     vmin:Optional[float] = -10.0,
     vmax:Optional[float] = 10.0,
+    N_mesh:Optional[int] = 500,
 ):
 
     # check directory
@@ -130,45 +111,19 @@ def plot_dist_snapshot(
     else:
         filepath = None
 
-    if prediction is not None:
-        fig, axes = plt.subplots(1, 2, figsize=(12, 5), facecolor="white", dpi=120)
-        axes = axes.ravel()
-    else:
-        fig, axes = plt.subplots(1, 1, figsize=(6, 5), facecolor="white", dpi=120)
+    fig, ax = plt.subplots(1, 1, figsize=(5, 3), facecolor="white", dpi=120)
 
     # snapshot info
     N = snapshot.shape[0] // 2
 
     # Scope
     extent = [xmin, xmax, vmin, vmax]
-
-    if prediction is not None:
-
-        dist, _, _ = np.histogram2d(snapshot[:N].ravel(), snapshot[N:].ravel(), bins=128, density=True)
-        im_fom = axes[0].imshow(dist.T, origin="lower", extent=extent, cmap="plasma", aspect="auto")
-        axes[0].set_xlabel("x")
-        axes[0].set_ylabel("v")
-        axes[0].set_title("FOM")
-
-        fig.colorbar(im_fom, ax=axes[0])
-
-        dist, _, _ = np.histogram2d(prediction[:N].ravel(), prediction[N:].ravel(), bins=128, density=True)
-        im_rom = axes[1].imshow(dist.T, origin="lower", extent=extent, cmap="plasma", aspect="auto")
-        axes[1].set_xlabel("x")
-        axes[1].set_ylabel("v")
-        axes[1].set_title("ROM")
-
-        fig.colorbar(im_rom, ax=axes[1])
-
-    else:
-        dist, _, _ = np.histogram2d(snapshot[:N].ravel(), snapshot[N:].ravel(), bins=128, density=True)
-        im = axes.imshow(dist.T, origin="lower", extent=extent, cmap="plasma", aspect="auto")
-        axes.set_xlabel("x")
-        axes.set_ylabel("v")
-        axes.set_title("FOM")
-
-        fig.colorbar(im, ax=axes)
-
+    dist, _, _ = np.histogram2d(snapshot[:N].ravel(), snapshot[N:].ravel(), bins=N_mesh, density=False)
+    im = ax.imshow(dist.T, origin="lower", extent=extent, cmap="plasma", aspect="auto")
+    ax.set_xlabel("x")
+    ax.set_ylabel("v")
+    ax.set_title(r"$f(x,v)$")
+    fig.colorbar(im, ax=ax)
     fig.tight_layout()
 
     if filepath is not None:
@@ -176,11 +131,10 @@ def plot_dist_snapshot(
 
     plt.close()
 
-    return fig, axes
+    return fig, ax
 
 def plot_two_stream_snapshot(
     snapshot:np.ndarray,
-    prediction:Optional[np.ndarray],
     save_dir:Optional[str],
     filename:Optional[str],
     xmin:Optional[float] = 0.0,
@@ -202,50 +156,25 @@ def plot_two_stream_snapshot(
     N = snapshot.shape[0] // 2
     Nh = N // 2
 
-    if prediction is not None:
-        fig, axes = plt.subplots(1, 2, figsize=(10, 4), facecolor="white", dpi=120)
-    else:
-        fig, axes = plt.subplots(1, 1, figsize=(6, 4), facecolor="white", dpi=120)
-
-    if prediction is not None:
-        axes = axes.ravel()
-        axes[0].cla()
-        axes[0].scatter(snapshot[0:Nh], snapshot[N:N+Nh], s=0.4, color="blue", alpha=0.5)
-        axes[0].scatter(snapshot[Nh:N], snapshot[N+Nh:], s=0.4, color="red", alpha=0.5)
-        axes[0].set_xlabel("x")
-        axes[0].set_ylabel("v")
-        axes[0].axis([xmin, xmax, vmin, vmax])
-        axes[0].set_title("FOM")
-        
-        axes[1].cla()
-        axes[1].scatter(prediction[0:Nh], prediction[N:N+Nh], s=0.4, color="blue", alpha=0.5)
-        axes[1].scatter(prediction[Nh:N], prediction[N+Nh:], s=0.4, color="red", alpha=0.5)
-        axes[1].set_xlabel("x")
-        axes[1].set_ylabel("v")
-        axes[1].axis([xmin, xmax, vmin, vmax])
-        axes[1].set_title("ROM")
-        
-    else:
-        axes.cla()
-        axes.scatter(snapshot[0:Nh], snapshot[N:N+Nh], s=0.4, color="blue", alpha=0.5)
-        axes.scatter(snapshot[Nh:N], snapshot[N+Nh:], s=0.4, color="red", alpha=0.5)
-        axes.set_xlabel("x")
-        axes.set_ylabel("v")
-        axes.axis([xmin, xmax, vmin, vmax])
-        axes.set_title("FOM")
+    fig, ax = plt.subplots(1, 1, figsize=(5, 3), facecolor="white", dpi=120)
+    
+    ax.cla()
+    ax.scatter(snapshot[0:Nh], snapshot[N:N+Nh], s=0.3, color="blue", alpha=0.5)
+    ax.scatter(snapshot[Nh:N], snapshot[N+Nh:], s=0.3, color="red", alpha=0.5)
+    ax.set_xlabel("x")
+    ax.set_ylabel("v")
+    ax.axis([xmin, xmax, vmin, vmax])
+    ax.set_title("Phase space")
 
     fig.tight_layout()
 
     if filepath is not None:
         plt.savefig(filepath, dpi=120)
 
-    plt.close()
-
-    return fig, axes
+    return fig, ax
 
 def plot_bump_on_tail_snapshot(
     snapshot: np.ndarray,
-    prediction: Optional[np.ndarray],
     save_dir: Optional[str],
     filename: Optional[str],
     xmin: Optional[float] = 0.0,
@@ -272,53 +201,33 @@ def plot_bump_on_tail_snapshot(
     else:
         low_electron_indice = np.arange(0,N)
 
-    if prediction is not None:
-        fig, axes = plt.subplots(1, 2, figsize=(10, 4), facecolor="white", dpi=120)
-    else:
-        fig, axes = plt.subplots(1, 1, figsize=(6, 4), facecolor="white", dpi=120)
+    fig, ax = plt.subplots(1, 1, figsize=(5, 3), facecolor="white", dpi=120)
 
-    axes = axes.ravel()
-
-    axes[0].cla()
-    axes[0].scatter(snapshot[low_electron_indice], snapshot[low_electron_indice + N], s=0.4, color="blue", alpha=0.5)
+    ax.cla()
+    ax.scatter(snapshot[low_electron_indice], snapshot[low_electron_indice + N], s=0.3, color="blue", alpha=0.5)
     
     if high_electron_indice is not None:
-        axes[0].scatter(snapshot[high_electron_indice], snapshot[high_electron_indice+N], s=0.4, color="red", alpha=0.5)
+        ax.scatter(snapshot[high_electron_indice], snapshot[high_electron_indice+N], s=0.3, color="red", alpha=0.5)
         
-    axes[0].set_xlabel("x")
-    axes[0].set_ylabel("v")
-    axes[0].axis([xmin, xmax, vmin, vmax])
-    axes[0].set_title("FOM")
-
-    if prediction is not None:
-        
-        axes[1].cla()
-        axes[1].scatter(prediction[low_electron_indice], prediction[low_electron_indice+N], s=0.4, color="blue", alpha=0.5)
-        
-        if high_electron_indice is not None:
-            axes[1].scatter(prediction[high_electron_indice], prediction[high_electron_indice+N], s=0.4, color="red", alpha=0.5)
-        
-        axes[1].set_xlabel("x")
-        axes[1].set_ylabel("v")
-        axes[1].axis([xmin, xmax, vmin, vmax])
-        axes[1].set_title("ROM")
-
+    ax.set_xlabel("x")
+    ax.set_ylabel("v")
+    ax.axis([xmin, xmax, vmin, vmax])
+    ax.set_title("Phase space")
     fig.tight_layout()
 
     if filepath is not None:
         plt.savefig(filepath, dpi=120)
 
-    plt.close()
+    return fig, ax
 
-    return fig, axes
 
 def plot_x_dist_evolution(
-    snapshot:np.ndarray,
-    prediction:Optional[np.ndarray],
-    save_dir:Optional[str],
-    filename:Optional[str],
-    xmin:Optional[float] = 0.0,
-    xmax:Optional[float] = 50.0,
+    snapshot: np.ndarray,
+    save_dir: Optional[str],
+    filename: Optional[str],
+    xmin: Optional[float] = 0.0,
+    xmax: Optional[float] = 50.0,
+    N_mesh: Optional[int] = 500,
 ):
 
     # check directory
@@ -332,7 +241,7 @@ def plot_x_dist_evolution(
     else:
         filepath = None
 
-    fig, axes = plt.subplots(1, 3, figsize=(12, 4), facecolor="white", dpi=120, sharey=True)
+    fig, axes = plt.subplots(1, 3, figsize=(10, 3), facecolor="white", dpi=120, sharey=True)
     axes = axes.ravel()
 
     # snapshot info
@@ -340,78 +249,53 @@ def plot_x_dist_evolution(
     Nt = snapshot.shape[1]
 
     # x array for plot
-    x = np.linspace(xmin, xmax, 128)
+    x = np.linspace(xmin, xmax, N_mesh)
 
     # t = 0
     density_od = gaussian_kde(snapshot[:N,0])
 
-    if prediction is not None:
-        density_rd = gaussian_kde(prediction[:N,0])
-
     axes[0].cla()
-    axes[0].plot(x, density_od(x), "b", label = "FOM")
+    axes[0].plot(x, density_od(x))
     axes[0].set_xlabel("x")
     axes[0].set_ylabel(r"$f(x,\cdot)$")
     axes[0].set_xlim([xmin, xmax])
     axes[0].set_title(r"$t=0$")
 
-    if prediction is not None:
-        axes[0].plot(x, density_rd(x), "r", label = "ROM")
-
-    axes[0].legend(loc="upper right")
-
     # t = tmax/2
     density_od = gaussian_kde(snapshot[:N, Nt//2])
 
-    if prediction is not None:
-        density_rd = gaussian_kde(prediction[:N, Nt//2])
-
     axes[1].cla()
-    axes[1].plot(x, density_od(x), "b", label="FOM")
+    axes[1].plot(x, density_od(x))
     axes[1].set_xlabel("x")
     axes[1].set_ylabel(r"$f(x,\cdot)$")
     axes[1].set_xlim([xmin, xmax])
     axes[1].set_title(r"$t=t_{max}/2$")
 
-    if prediction is not None:
-        axes[1].plot(x, density_rd(x), "r", label="ROM")
-
-    axes[1].legend(loc="upper right")
-
     # t = tmax
     density_od = gaussian_kde(snapshot[:N,-1])
 
-    if prediction is not None:
-        density_rd = gaussian_kde(prediction[:N,-1])
-
     axes[2].cla()
-    axes[2].plot(x, density_od(x), "b", label="FOM")
+    axes[2].plot(x, density_od(x))
     axes[2].set_xlabel("x")
     axes[2].set_ylabel(r"$f(x,\cdot)$")
     axes[2].set_xlim([xmin, xmax])
     axes[2].set_title(r"$t=t_{max}$")
-
-    if prediction is not None:
-        axes[2].plot(x, density_rd(x), "r", label="ROM")
-
-    axes[2].legend(loc="upper right")
 
     fig.tight_layout()
 
     if filepath is not None:
         plt.savefig(filepath, dpi=120)
 
-    plt.close()
-
     return fig, axes
 
+
 def plot_v_dist_evolution(
-    snapshot:np.ndarray,
-    prediction:Optional[np.ndarray],
-    save_dir:Optional[str],
-    filename:Optional[str],
-    vmin:Optional[float] = -10.0,
-    vmax:Optional[float] = 10.0,
+    snapshot: np.ndarray,
+    save_dir: Optional[str],
+    filename: Optional[str],
+    vmin: Optional[float] = -10.0,
+    vmax: Optional[float] = 10.0,
+    N_mesh: Optional[int] = 500,
 ):
 
     # check directory
@@ -433,80 +317,55 @@ def plot_v_dist_evolution(
     Nt = snapshot.shape[1]
 
     # velocity array for plot
-    v = np.linspace(vmin, vmax, 128)
+    v = np.linspace(vmin, vmax, N_mesh)
 
     # t = 0
     density_od = gaussian_kde(snapshot[N:,0])
 
-    if prediction is not None:
-        density_rd = gaussian_kde(prediction[N:,0])
-
     axes[0].cla()
-    axes[0].plot(v, density_od(v), "b", label = "FOM")
+    axes[0].plot(v, density_od(v))
     axes[0].set_xlabel("v")
     axes[0].set_ylabel(r"$f(\cdot,v)$")
     axes[0].set_xlim([vmin, vmax])
     axes[0].set_title(r"$t=0$")
 
-    if prediction is not None:
-        axes[0].plot(v, density_rd(v), "r", label = "ROM")
-
-    axes[0].legend(loc="upper right")
-
     # t = tmax/2
     density_od = gaussian_kde(snapshot[N:, Nt//2])
 
-    if prediction is not None:
-        density_rd = gaussian_kde(prediction[N:, Nt//2])
-
     axes[1].cla()
-    axes[1].plot(v, density_od(v), "b", label="FOM")
+    axes[1].plot(v, density_od(v))
     axes[1].set_xlabel("v")
     axes[1].set_ylabel(r"$f(\cdot,v)$")
     axes[1].set_xlim([vmin, vmax])
     axes[1].set_title(r"$t=t_{max}/2$")
 
-    if prediction is not None:
-        axes[1].plot(v, density_rd(v), "r", label="ROM")
-
-    axes[1].legend(loc="upper right")
-
     # t = tmax
     density_od = gaussian_kde(snapshot[N:,-1])
 
-    if prediction is not None:
-        density_rd = gaussian_kde(prediction[N:,-1])
-
     axes[2].cla()
-    axes[2].plot(v, density_od(v), "b", label="FOM")
+    axes[2].plot(v, density_od(v))
     axes[2].set_xlabel("v")
     axes[2].set_ylabel(r"$f(\cdot,v)$")
     axes[2].set_xlim([vmin, vmax])
     axes[2].set_title(r"$t=t_{max}$")
-
-    if prediction is not None:
-        axes[2].plot(v, density_rd(v), "r", label="ROM")
-
-    axes[2].legend(loc="upper right")
 
     fig.tight_layout()
 
     if filepath is not None:
         plt.savefig(filepath, dpi=120)
 
-    plt.close()
-
     return fig, axes
 
+
 def plot_dist_evolution(
-    snapshot:np.ndarray,
-    prediction:Optional[np.ndarray],
-    save_dir:Optional[str],
-    filename:Optional[str],
-    xmin:Optional[float] = 0.0,
-    xmax:Optional[float] = 50.0,
-    vmin:Optional[float] = -10.0,
-    vmax:Optional[float] = 10.0,
+    snapshot: np.ndarray,
+    save_dir: Optional[str],
+    filename: Optional[str],
+    xmin: Optional[float] = 0.0,
+    xmax: Optional[float] = 50.0,
+    vmin: Optional[float] = -10.0,
+    vmax: Optional[float] = 10.0,
+    N_mesh: Optional[int] = 500,
 ):
     # check directory
     if save_dir is not None:
@@ -523,112 +382,44 @@ def plot_dist_evolution(
     # Scope
     extent = [xmin, xmax, vmin, vmax]
 
-    if prediction is not None:
-        fig, axes = plt.subplots(2, 3, figsize=(18, 10), facecolor="white", dpi=120, constrained_layout=True)
-    else:
-        fig, axes = plt.subplots(1, 3, figsize=(18, 5), facecolor="white", dpi=120, constrained_layout=True)
+    fig, axes = plt.subplots(1, 3, figsize=(15, 3), facecolor="white", dpi=120, constrained_layout=True)
+    axes = axes.ravel()
 
-    if prediction is not None:
+    axes[0].cla()
+    dist, _, _ = np.histogram2d(snapshot[:N,0].ravel(), snapshot[N:,0].ravel(), bins=N_mesh, density=False)
+    axes[0].imshow(dist.T, origin="lower", extent=extent, cmap="plasma", aspect="auto")
+    axes[0].set_xlabel("x")
+    axes[0].set_ylabel("v")
+    axes[0].axis([xmin, xmax, vmin, vmax])
+    axes[0].set_title(r"$t=0$")
 
-        axes[0,0].cla()
+    axes[1].cla()
+    dist, _, _ = np.histogram2d(snapshot[:N,Nt//2].ravel(), snapshot[N:,Nt//2].ravel(), bins=N_mesh, density=False)
+    axes[1].imshow(dist.T, origin="lower", extent=extent, cmap="plasma", aspect="auto")
+    axes[1].set_xlabel("x")
+    axes[1].set_ylabel("v")
+    axes[1].axis([xmin, xmax, vmin, vmax])
+    axes[1].set_title(r"$t=t_{max}/2$")
 
-        dist, _, _ = np.histogram2d(snapshot[:N,0].ravel(), snapshot[N:,0].ravel(), bins=128, density=True)
-        im_00 = axes[0,0].imshow(dist.T, origin="lower", extent=extent, cmap="plasma", aspect="auto")
-        axes[0,0].set_xlabel("x")
-        axes[0,0].set_ylabel("v")
-        axes[0,0].axis([xmin, xmax, vmin, vmax])
-        axes[0,0].set_title("FOM at $t=0$")
+    axes[2].cla()
+    dist, _, _ = np.histogram2d(snapshot[:N,-1].ravel(), snapshot[N:,-1].ravel(), bins=N_mesh, density=False)
+    im = axes[2].imshow(dist.T, origin="lower", extent=extent, cmap="plasma", aspect="auto")
 
-        axes[0,1].cla()
+    axes[2].set_xlabel("x")
+    axes[2].set_ylabel("v")
+    axes[2].axis([xmin, xmax, vmin, vmax])
+    axes[2].set_title(r"$t=t_{max}$")
 
-        dist, _, _ = np.histogram2d(snapshot[:N,Nt//2].ravel(), snapshot[N:,Nt//2].ravel(), bins=128, density=True)
-        im_01 = axes[0,1].imshow(dist.T, origin="lower", extent=extent, cmap="plasma", aspect="auto")
-        axes[0,1].set_xlabel("x")
-        axes[0,1].set_ylabel("v")
-        axes[0,1].axis([xmin, xmax, vmin, vmax])
-        axes[0,1].set_title("FOM at $t=t_{max}/2$")
-
-        axes[0,2].cla()
-
-        dist, _, _ = np.histogram2d(snapshot[:N,-1].ravel(), snapshot[N:,-1].ravel(), bins=128, density=True)
-        im_02 = axes[0,2].imshow(dist.T, origin="lower", extent=extent, cmap="plasma", aspect="auto")
-        axes[0,2].set_xlabel("x")
-        axes[0,2].set_ylabel("v")
-        axes[0,2].axis([xmin, xmax, vmin, vmax])
-        axes[0,2].set_title("FOM at $t=t_{max}$")
-
-        fig.colorbar(im_02, ax=axes[0,:].ravel().tolist())
-
-        axes[1,0].cla()
-        dist, _, _ = np.histogram2d(prediction[:N,0].ravel(), prediction[N:,0].ravel(), bins=128, density=True)
-        im_10 = axes[1,0].imshow(dist.T, origin="lower", extent=extent, cmap="plasma", aspect="auto")
-        axes[1,0].set_xlabel("x")
-        axes[1,0].set_ylabel("v")
-        axes[1,0].axis([xmin, xmax, vmin, vmax])
-        axes[1,0].set_title("ROM at $t=0$")
-
-        axes[1,1].cla()
-        dist, _, _ = np.histogram2d(prediction[:N,Nt//2].ravel(), prediction[N:,Nt//2].ravel(), bins=128, density=True)
-        im_11 = axes[1,1].imshow(dist.T, origin="lower", extent=extent, cmap="plasma", aspect="auto")
-
-        axes[1,1].set_xlabel("x")
-        axes[1,1].set_ylabel("v")
-        axes[1,1].axis([xmin, xmax, vmin, vmax])
-        axes[1,1].set_title("ROM at $t=t_{max}/2$")
-
-        axes[1,2].cla()
-        dist, _, _ = np.histogram2d(prediction[:N,-1].ravel(), prediction[N:,-1].ravel(), bins=128, density=True)
-        im_12 = axes[1,2].imshow(dist.T, origin="lower", extent=extent, cmap="plasma", aspect="auto")
-
-        axes[1,2].set_xlabel("x")
-        axes[1,2].set_ylabel("v")
-        axes[1,2].axis([xmin, xmax, vmin, vmax])
-        axes[1,2].set_title("ROM at $t=t_{max}$")
-
-        fig.colorbar(im_12, ax=axes[1, :].ravel().tolist())
-
-    else:
-        axes = axes.ravel()
-
-        axes[0].cla()
-        dist, _, _ = np.histogram2d(snapshot[:N,0].ravel(), snapshot[N:,0].ravel(), bins=128, density=True)
-        im_0 = axes[0].imshow(dist.T, origin="lower", extent=extent, cmap="plasma", aspect="auto")
-
-        axes[0].set_xlabel("x")
-        axes[0].set_ylabel("v")
-        axes[0].axis([xmin, xmax, vmin, vmax])
-        axes[0].set_title("FOM at $t=0$")
-
-        axes[1].cla()
-        dist, _, _ = np.histogram2d(snapshot[:N,Nt//2].ravel(), snapshot[N:,Nt//2].ravel(), bins=128, density=True)
-        im_1 = axes[1].imshow(dist.T, origin="lower", extent=extent, cmap="plasma", aspect="auto")
-
-        axes[1].set_xlabel("x")
-        axes[1].set_ylabel("v")
-        axes[1].axis([xmin, xmax, vmin, vmax])
-        axes[1].set_title("FOM at $t=t_{max}/2$")
-
-        axes[2].cla()
-        dist, _, _ = np.histogram2d(snapshot[:N,-1].ravel(), snapshot[N:,-1].ravel(), bins=128, density=True)
-        im_2 = axes[2].imshow(dist.T, origin="lower", extent=extent, cmap="plasma", aspect="auto")
-
-        axes[2].set_xlabel("x")
-        axes[2].set_ylabel("v")
-        axes[2].axis([xmin, xmax, vmin, vmax])
-        axes[2].set_title("FOM at $t=t_{max}$")
-
-        fig.colorbar(im_2, ax=axes.ravel().tolist())
+    fig.colorbar(im, ax=axes.ravel().tolist())
 
     if filepath is not None:
         plt.savefig(filepath, dpi=120)
-
-    plt.close()
-
+        
     return fig, axes
+
 
 def plot_two_stream_evolution(
     snapshot:np.ndarray,
-    prediction:Optional[np.ndarray],
     save_dir:Optional[str],
     filename:Optional[str],
     xmin:Optional[float] = 0.0,
@@ -649,100 +440,43 @@ def plot_two_stream_evolution(
     Nh = N // 2
     Nt = snapshot.shape[1]
 
-    if prediction is not None:
-        fig, axes = plt.subplots(2, 3, figsize=(12, 8), facecolor="white", dpi=120)
-    else:
-        fig, axes = plt.subplots(1, 3, figsize=(12, 4), facecolor="white", dpi=120)
+    fig, axes = plt.subplots(1, 3, figsize=(12, 3), facecolor="white", dpi=120)
 
-    if prediction is not None:
-        
-        axes[0,0].cla()
-        axes[0,0].scatter(snapshot[0:Nh,0], snapshot[N:N+Nh,0], s=0.4, color="blue", alpha=0.5)
-        axes[0,0].scatter(snapshot[Nh:N,0], snapshot[N+Nh:,0], s=0.4, color="red", alpha=0.5)
-        axes[0,0].set_xlabel("x")
-        axes[0,0].set_ylabel("v")
-        axes[0,0].axis([xmin, xmax, vmin, vmax])
-        axes[0,0].set_title("FOM at $t=0$")
-
-        axes[0,1].cla()
-        axes[0,1].scatter(snapshot[0:Nh,Nt//2], snapshot[N:N+Nh,Nt//2], s=0.4, color="blue", alpha=0.5)
-        axes[0,1].scatter(snapshot[Nh:N,Nt//2], snapshot[N+Nh:,Nt//2], s=0.4, color="red", alpha=0.5)
-        axes[0,1].set_xlabel("x")
-        axes[0,1].set_ylabel("v")
-        axes[0,1].axis([xmin, xmax, vmin, vmax])
-        axes[0,1].set_title("FOM at $t=t_{max}/2$")
-
-        axes[0,2].cla()
-        axes[0,2].scatter(snapshot[0:Nh,-1], snapshot[N:N+Nh,-1], s=0.4, color="blue", alpha=0.5)
-        axes[0,2].scatter(snapshot[Nh:N,-1], snapshot[N+Nh:,-1], s=0.4, color="red", alpha=0.5)
-        axes[0,2].set_xlabel("x")
-        axes[0,2].set_ylabel("v")
-        axes[0,2].axis([xmin, xmax, vmin, vmax])
-        axes[0,2].set_title("FOM at $t=t_{max}$")
+    axes = axes.ravel()
     
-        axes[1,0].cla()
-        axes[1,0].scatter(prediction[0:Nh,0], prediction[N:N+Nh,0], s=0.4, color="blue", alpha=0.5)
-        axes[1,0].scatter(prediction[Nh:N,0], prediction[N+Nh:,0], s=0.4, color="red", alpha=0.5)
-        axes[1,0].set_xlabel("x")
-        axes[1,0].set_ylabel("v")
-        axes[1,0].axis([xmin, xmax, vmin, vmax])
-        axes[1,0].set_title("ROM at $t=0$")
+    axes[0].cla()
+    axes[0].scatter(snapshot[0:Nh,0], snapshot[N:N+Nh,0], s=0.3, color="blue", alpha=0.5)
+    axes[0].scatter(snapshot[Nh:N,0], snapshot[N+Nh:,0], s=0.3, color="red", alpha=0.5)
+    axes[0].set_xlabel("x")
+    axes[0].set_ylabel("v")
+    axes[0].axis([xmin, xmax, vmin, vmax])
+    axes[0].set_title(r"$t=0$")
 
-        axes[1,1].cla()
-        axes[1,1].scatter(prediction[0:Nh,Nt//2], prediction[N:N+Nh,Nt//2], s=0.4, color="blue", alpha=0.5)
-        axes[1,1].scatter(prediction[Nh:N,Nt//2], prediction[N+Nh:,Nt//2], s=0.4, color="red", alpha=0.5)
-        axes[1,1].set_xlabel("x")
-        axes[1,1].set_ylabel("v")
-        axes[1,1].axis([xmin, xmax, vmin, vmax])
-        axes[1,1].set_title("ROM at $t=t_{max}/2$")
+    axes[1].cla()
+    axes[1].scatter(snapshot[0:Nh,Nt//2], snapshot[N:N+Nh,Nt//2], s=0.3, color="blue", alpha=0.5)
+    axes[1].scatter(snapshot[Nh:N,Nt//2], snapshot[N+Nh:,Nt//2], s=0.3, color="red", alpha=0.5)
+    axes[1].set_xlabel("x")
+    axes[1].set_ylabel("v")
+    axes[1].axis([xmin, xmax, vmin, vmax])
+    axes[1].set_title(r"$t=t_{max}/2$")
 
-        axes[1,2].cla()
-        axes[1,2].scatter(prediction[0:Nh,-1], prediction[N:N+Nh,-1], s=0.4, color="blue", alpha=0.5)
-        axes[1,2].scatter(prediction[Nh:N,-1], prediction[N+Nh:,-1], s=0.4, color="red", alpha=0.5)
-        axes[1,2].set_xlabel("x")
-        axes[1,2].set_ylabel("v")
-        axes[1,2].axis([xmin, xmax, vmin, vmax])
-        axes[1,2].set_title("ROM at $t=t_{max}$")
-        
-    else:
-        axes = axes.ravel()
-        
-        axes[0].cla()
-        axes[0].scatter(snapshot[0:Nh,0], snapshot[N:N+Nh,0], s=0.4, color="blue", alpha=0.5)
-        axes[0].scatter(snapshot[Nh:N,0], snapshot[N+Nh:,0], s=0.4, color="red", alpha=0.5)
-        axes[0].set_xlabel("x")
-        axes[0].set_ylabel("v")
-        axes[0].axis([xmin, xmax, vmin, vmax])
-        axes[0].set_title("FOM at $t=0$")
-
-        axes[1].cla()
-        axes[1].scatter(snapshot[0:Nh,Nt//2], snapshot[N:N+Nh,Nt//2], s=0.4, color="blue", alpha=0.5)
-        axes[1].scatter(snapshot[Nh:N,Nt//2], snapshot[N+Nh:,Nt//2], s=0.4, color="red", alpha=0.5)
-        axes[1].set_xlabel("x")
-        axes[1].set_ylabel("v")
-        axes[1].axis([xmin, xmax, vmin, vmax])
-        axes[1].set_title("FOM at $t=t_{max}/2$")
-
-        axes[2].cla()
-        axes[2].scatter(snapshot[0:Nh,-1], snapshot[N:N+Nh,-1], s=0.4, color="blue", alpha=0.5)
-        axes[2].scatter(snapshot[Nh:N,-1], snapshot[N+Nh:,-1], s=0.4, color="red", alpha=0.5)
-        axes[2].set_xlabel("x")
-        axes[2].set_ylabel("v")
-        axes[2].axis([xmin, xmax, vmin, vmax])
-        axes[2].set_title("FOM at $t=t_{max}$")
+    axes[2].cla()
+    axes[2].scatter(snapshot[0:Nh,-1], snapshot[N:N+Nh,-1], s=0.3, color="blue", alpha=0.5)
+    axes[2].scatter(snapshot[Nh:N,-1], snapshot[N+Nh:,-1], s=0.3, color="red", alpha=0.5)
+    axes[2].set_xlabel("x")
+    axes[2].set_ylabel("v")
+    axes[2].axis([xmin, xmax, vmin, vmax])
+    axes[2].set_title(r"$t=t_{max}$")
 
     fig.tight_layout()
     
     if filepath is not None:
         plt.savefig(filepath, dpi=120)
         
-    plt.close()
-
     return fig, axes
 
 def plot_bump_on_tail_evolution(
     snapshot:np.ndarray,
-    prediction:Optional[np.ndarray],
     save_dir:Optional[str],
     filename:Optional[str],
     xmin:Optional[float] = 0.0,
@@ -769,122 +503,48 @@ def plot_bump_on_tail_evolution(
     else:
         low_electron_indice = np.arange(0,N)
 
-    if prediction is not None:
-        fig, axes = plt.subplots(2, 3, figsize=(12, 8), facecolor="white", dpi=120)
-    else:
-        fig, axes = plt.subplots(1, 3, figsize=(12, 4), facecolor="white", dpi=120)
-
-    if prediction is not None:
-        
-        axes[0,0].cla()
-        axes[0,0].scatter(snapshot[low_electron_indice,0], snapshot[low_electron_indice+N,0], s=0.4, color="blue", alpha=0.5)
-        
-        if high_electron_indice is not None:
-            axes[0,0].scatter(snapshot[high_electron_indice,0], snapshot[high_electron_indice+N,0], s=0.4, color="red", alpha=0.5)
-        
-        axes[0,0].set_xlabel("x")
-        axes[0,0].set_ylabel("v")
-        axes[0,0].axis([xmin, xmax, vmin, vmax])
-        axes[0,0].set_title("FOM at $t=0$")
-
-        axes[0,1].cla() 
-        axes[0,1].scatter(snapshot[low_electron_indice,Nt//2], snapshot[low_electron_indice+N,Nt//2], s=0.4, color="blue", alpha=0.5)
-        
-        if high_electron_indice is not None:
-            axes[0,1].scatter(snapshot[high_electron_indice,Nt//2], snapshot[high_electron_indice+N,Nt//2], s=0.4, color="red", alpha=0.5)
-        
-        axes[0,1].set_xlabel("x")
-        axes[0,1].set_ylabel("v")
-        axes[0,1].axis([xmin, xmax, vmin, vmax])
-        axes[0,1].set_title("FOM at $t=t_{max}/2$")
-
-        axes[0,2].cla()
-        axes[0,2].scatter(snapshot[low_electron_indice,-1], snapshot[low_electron_indice+N,-1], s=0.4, color="blue", alpha=0.5)
-        
-        if high_electron_indice is not None:
-            axes[0,2].scatter(snapshot[high_electron_indice,-1], snapshot[high_electron_indice+N,-1], s=0.4, color="red", alpha=0.5)
-        
-        axes[0,2].set_xlabel("x")
-        axes[0,2].set_ylabel("v")
-        axes[0,2].axis([xmin, xmax, vmin, vmax])
-        axes[0,2].set_title("FOM at $t=t_{max}$")
-        
-        axes[1,0].cla()
-        axes[1,0].scatter(prediction[low_electron_indice,0], prediction[low_electron_indice+N,0], s=0.4, color="blue", alpha=0.5)
+    fig, axes = plt.subplots(1, 3, figsize=(12, 3), facecolor="white", dpi=120)
     
-        if high_electron_indice is not None:
-            axes[1,0].scatter(prediction[high_electron_indice,0], prediction[high_electron_indice+N,0], s=0.4, color="red", alpha=0.5)
-        
-        axes[1,0].set_xlabel("x")
-        axes[1,0].set_ylabel("v")
-        axes[1,0].axis([xmin, xmax, vmin, vmax])
-        axes[1,0].set_title("ROM at $t=0$")
-
-        axes[1,1].cla()
-        axes[1,1].scatter(prediction[low_electron_indice,Nt//2], prediction[low_electron_indice+N,Nt//2], s=0.4, color="blue", alpha=0.5)
+    axes = axes.ravel()
     
-        if high_electron_indice is not None:
-            axes[1,1].scatter(prediction[high_electron_indice,Nt//2], prediction[high_electron_indice+N,Nt//2], s=0.4, color="red", alpha=0.5)
-        
-        axes[1,1].set_xlabel("x")
-        axes[1,1].set_ylabel("v")
-        axes[1,1].axis([xmin, xmax, vmin, vmax])
-        axes[1,1].set_title("ROM at $t=t_{max}/2$")
-
-        axes[1,2].cla()    
-        axes[1,2].scatter(prediction[low_electron_indice,-1], prediction[low_electron_indice+N,-1], s=0.4, color="blue", alpha=0.5)
+    axes[0].cla()
+    axes[0].scatter(snapshot[low_electron_indice,0], snapshot[low_electron_indice+N,0], s=0.3, color="blue", alpha=0.5)
     
-        if high_electron_indice is not None:
-            axes[1,2].scatter(prediction[high_electron_indice,-1], prediction[high_electron_indice+N,-1], s=0.4, color="red", alpha=0.5)
-        
-        axes[1,2].set_xlabel("x")
-        axes[1,2].set_ylabel("v")
-        axes[1,2].axis([xmin, xmax, vmin, vmax])
-        axes[1,2].set_title("ROM at $t=t_{max}$")
-        
-    else:
-        axes = axes.ravel()
-        
-        axes[0].cla()
-        axes[0].scatter(snapshot[low_electron_indice,0], snapshot[low_electron_indice+N,0], s=0.4, color="blue", alpha=0.5)
-        
-        if high_electron_indice is not None:
-            axes[0].scatter(snapshot[high_electron_indice,0], snapshot[high_electron_indice+N,0], s=0.4, color="red", alpha=0.5)
-        
-        axes[0].set_xlabel("x")
-        axes[0].set_ylabel("v")
-        axes[0].axis([xmin, xmax, vmin, vmax])
-        axes[0].set_title("FOM at $t=0$")
-        
-        axes[1].cla() 
-        axes[1].scatter(snapshot[low_electron_indice,Nt//2], snapshot[low_electron_indice+N,Nt//2], s=0.4, color="blue", alpha=0.5)
-        
-        if high_electron_indice is not None:
-            axes[1].scatter(snapshot[high_electron_indice,Nt//2], snapshot[high_electron_indice+N,Nt//2], s=0.4, color="red", alpha=0.5)
-        
-        axes[1].set_xlabel("x")
-        axes[1].set_ylabel("v")
-        axes[1].axis([xmin, xmax, vmin, vmax])
-        axes[1].set_title("FOM at $t=t_{max}/2$")
+    if high_electron_indice is not None:
+        axes[0].scatter(snapshot[high_electron_indice,0], snapshot[high_electron_indice+N,0], s=0.3, color="red", alpha=0.5)
+    
+    axes[0].set_xlabel("x")
+    axes[0].set_ylabel("v")
+    axes[0].axis([xmin, xmax, vmin, vmax])
+    axes[0].set_title(r"$t=0$")
+    
+    axes[1].cla() 
+    axes[1].scatter(snapshot[low_electron_indice,Nt//2], snapshot[low_electron_indice+N,Nt//2], s=0.3, color="blue", alpha=0.5)
+    
+    if high_electron_indice is not None:
+        axes[1].scatter(snapshot[high_electron_indice,Nt//2], snapshot[high_electron_indice+N,Nt//2], s=0.3, color="red", alpha=0.5)
+    
+    axes[1].set_xlabel("x")
+    axes[1].set_ylabel("v")
+    axes[1].axis([xmin, xmax, vmin, vmax])
+    axes[1].set_title(r"$t=t_{max}/2$")
 
-        axes[2].cla()
-        axes[2].scatter(snapshot[low_electron_indice,-1], snapshot[low_electron_indice+N,-1], s=0.4, color="blue", alpha=0.5)
-        
-        if high_electron_indice is not None:
-            axes[2].scatter(snapshot[high_electron_indice,-1], snapshot[high_electron_indice+N,-1], s=0.4, color="red", alpha=0.5)
-        
-        axes[2].set_xlabel("x")
-        axes[2].set_ylabel("v")
-        axes[2].axis([xmin, xmax, vmin, vmax])
-        axes[2].set_title("FOM at $t=t_{max}$")
+    axes[2].cla()
+    axes[2].scatter(snapshot[low_electron_indice,-1], snapshot[low_electron_indice+N,-1], s=0.3, color="blue", alpha=0.5)
+    
+    if high_electron_indice is not None:
+        axes[2].scatter(snapshot[high_electron_indice,-1], snapshot[high_electron_indice+N,-1], s=0.3, color="red", alpha=0.5)
+    
+    axes[2].set_xlabel("x")
+    axes[2].set_ylabel("v")
+    axes[2].axis([xmin, xmax, vmin, vmax])
+    axes[2].set_title(r"$t=t_{max}$")
 
     fig.tight_layout()
     
     if filepath is not None:
         plt.savefig(filepath, dpi=120)
         
-    plt.close()
-
     return fig, axes
 
 # Plot for analysis: E-field (log scale in time, profile), density (profile), and potential (profile)
