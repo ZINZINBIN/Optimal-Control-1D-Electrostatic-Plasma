@@ -69,7 +69,20 @@ def compute_n(u:np.ndarray, dx:float, N_mesh:int, n0:float, L:float, N:int, retu
         else:
             return n
 
-def compute_E(u:np.ndarray, dx:float, N_mesh:int, n0:float, L:float, N:int, grad:Optional[np.ndarray] = None, laplacian:Optional[np.ndarray]=None, return_all:bool=False, interpol:Literal['CIC', 'TSC'] = "CIC"):
+
+def compute_E(
+    u: np.ndarray,
+    dx: float,
+    N_mesh: int,
+    n0: float,
+    L: float,
+    N: int,
+    grad: Optional[np.ndarray] = None,
+    laplacian: Optional[np.ndarray] = None,
+    return_all: bool = False,
+    interpol: Literal["CIC", "TSC"] = "CIC",
+    E_external: Optional[np.ndarray] = None,
+):
 
     if grad is None:
         grad = generate_grad(L, N_mesh)
@@ -85,6 +98,9 @@ def compute_E(u:np.ndarray, dx:float, N_mesh:int, n0:float, L:float, N:int, grad
 
     phi_mesh = Gaussian_Elimination_Periodic(laplacian, n - n0, gamma = 5.0).reshape(-1, 1)
     E_mesh = (-1) * np.matmul(grad, phi_mesh)
+    
+    if E_external is not None:
+        E_mesh = E_mesh + E_external
 
     if interpol == "CIC":
         E = w_l * E_mesh[idx_l[:,0]] + w_r * E_mesh[idx_r[:,0]]
@@ -98,6 +114,7 @@ def compute_E(u:np.ndarray, dx:float, N_mesh:int, n0:float, L:float, N:int, grad
         return E, phi, E_mesh, phi_mesh
     else:
         return E, E_mesh
+
 
 def compute_electric_energy(
     x: np.array,

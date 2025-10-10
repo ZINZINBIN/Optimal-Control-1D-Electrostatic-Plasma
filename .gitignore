@@ -1,0 +1,22 @@
+# .pdf file
+*.pdf
+
+# .zip file
+*.zip
+
+# mat file
+*.mat
+
+# pickle file
+*.pkl
+*.pickle
+
+# log file
+*.err
+*.out
+
+# result file
+*.gif
+
+# slurm
+*.slurm

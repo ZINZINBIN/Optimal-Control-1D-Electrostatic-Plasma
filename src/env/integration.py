@@ -1,18 +1,6 @@
 import numpy as np
 from typing import Callable
-
-def check_invalid_value(x: np.ndarray):
-    is_nan = np.isnan(x).any()
-    is_posinf = np.isposinf(x).any()
-    is_neginf = np.isneginf(x).any()
-    is_inf = np.isinf(x).any()
-    is_nonfinite = not np.isfinite(x).all()
-    is_overflow = np.abs(x).max() > 1e4
-
-    if is_nan or is_posinf or is_neginf or is_inf or is_nonfinite or is_overflow:
-        return True
-    else:
-        return False
+from src.util import check_invalid_value
 
 # -----------------------------
 # Baselines (explicit, non-symplectic)

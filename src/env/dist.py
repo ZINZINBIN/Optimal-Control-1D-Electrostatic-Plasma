@@ -27,14 +27,12 @@ class BasicDistribution(ABC):
 class TwoStream(BasicDistribution):
     def __init__(
         self,
-        a: float = 0.3,
         v0: float = 4.0,
         sigma: float = 0.5,
         n_samples: int = 40000,
         L:float = 50,
     ):
         # parameters
-        self.a = a
         self.v0 = v0
         self.sigma = sigma
         self.L = L

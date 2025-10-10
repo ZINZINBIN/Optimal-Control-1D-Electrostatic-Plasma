@@ -47,15 +47,18 @@ class PIC:
         # Interpolation
         self.interpol = interpol
 
+        # Gradient field and laplacian of potential
+        # Mesh for 1st derivative and 2nd derivative
+        self.grad = generate_grad(L, N_mesh)
+        self.laplacian = generate_laplacian(L, N_mesh)
+        
         # Field quantities
         self.phi_mesh = None
         self.E_mesh = None
         self.E = None
 
-        # Gradient field and laplacian of potential
-        # Mesh for 1st derivative and 2nd derivative
-        self.grad = generate_grad(L, N_mesh)
-        self.laplacian = generate_laplacian(L, N_mesh)
+        # initialize x and v
+        self.initialize()
 
     def initialize(self):
         x, v = self.init_dist.get_sample()
@@ -70,6 +73,10 @@ class PIC:
             print("CFL condtion invalid: change dt = {:.4f}".format(self.dt))
         else:
             print("CFL condtion valid: dt = {:.4f}".format(self.dt))
+
+        # update density and corresponding electric field
+        self.update_density()
+        self.update_E_field()
 
     def update_params(self, **kwargs):
         for key in kwargs.keys():
@@ -120,15 +127,11 @@ class PIC:
     def compute_state_gradient(self, eta:np.ndarray, E_external:Optional[np.ndarray]):
 
         xdot = eta[self.N:,:]
-        vdot = (-1) * compute_E(eta, self.dx, self.N_mesh, self.n0, self.L, self.N, self.grad, self.laplacian, False, self.interpol)[0]
-
-        if E_external is not None:
-            vdot += E_external.reshape(-1,1)
-
+        vdot = (-1) * compute_E(eta, self.dx, self.N_mesh, self.n0, self.L, self.N, self.grad, self.laplacian, False, self.interpol, E_external)[0]
         grad_eta = np.concatenate([xdot, vdot], axis = 0)
         return grad_eta
 
-    def update_motion(self, E_external: Optional[np.ndarray]):
+    def update_state(self, E_external: Optional[np.ndarray]):
         eta = np.concatenate([self.x.reshape(-1, 1), self.v.reshape(-1, 1)], axis=0)
         eta_f = symplectic_4th_order(eta, lambda x : self.compute_state_gradient(x, E_external), self.dt)
 
@@ -144,6 +147,16 @@ class PIC:
 
         self.update_density()
         self.update_E_field()
+    
+    def get_state(self):
+        state = np.concatenate([self.x.copy().reshape(-1,1), self.v.copy().reshape(-1,1)], axis = 0)
+        return state
+    
+    def get_energy(self):
+        return compute_hamiltonian(self.x, self.v, self.dx, self.N, self.N_mesh, self.n0, self.L, self.interpol)
+    
+    def get_electric_energy(self):
+        return compute_electric_energy(self.x, self.dx, self.N, self.N_mesh, self.n0, self.L, self.interpol)
 
     def simulate(self, E_external_traj:Optional[List[np.ndarray]]):
 
@@ -173,23 +186,23 @@ class PIC:
             else:
                 E_external = None
 
-            self.update_motion(E_external)
+            self.update_state(E_external)
 
             pos_list.append(self.x.copy())
             vel_list.append(self.v.copy())
-            
+
             E = compute_hamiltonian(self.x, self.v, self.dx, self.N, self.N_mesh, self.n0, self.L, self.interpol)
             PE = compute_electric_energy(self.x, self.dx, self.N, self.N_mesh, self.n0, self.L, self.interpol)
 
             E_list.append(E)
             PE_list.append(PE)
-            
+
         print("# PIC simulation complete")
-        
+
         qs = np.concatenate(pos_list, axis = 1)
         ps = np.concatenate(vel_list, axis = 1)
         snapshot = np.concatenate([qs, ps], axis=0)
-        
+
         E = np.array(E_list)
         PE = np.array(PE_list)
 
