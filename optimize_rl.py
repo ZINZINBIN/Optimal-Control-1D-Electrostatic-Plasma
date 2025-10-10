@@ -50,20 +50,33 @@ def parsing():
     # Network
     parser.add_argument("--mlp_dim", type = int, default = 32)
     parser.add_argument("--std", type = float, default = 0.25)
-    parser.add_argument("--capacity", type=int, default=10)
+    parser.add_argument("--capacity", type=int, default=16)
     parser.add_argument("--eps_clip", type=float, default=0.25)
-    parser.add_argument("--entropy_coeff", type=float, default=0.1)
-    parser.add_argument("--num_episode", type=int, default=10)
+    parser.add_argument("--entropy_coeff", type=float, default=0.25)
+    parser.add_argument("--num_episode", type=int, default=100)
     parser.add_argument("--verbose", type=int, default=10)
-    parser.add_argument("--lr", type=float, default=5e-4)
+    parser.add_argument("--lr", type=float, default=1e-3)
 
     # Cost parameters
-    parser.add_argument("--alpha", type=float, default=1e-5)
-    parser.add_argument("--beta", type=float, default=1e-4)
+    parser.add_argument("--alpha", type=float, default=1e-6)
+    parser.add_argument("--beta", type=float, default=1e-3)
     parser.add_argument("--save_weight", type=str, default="./dataset/ppo.pt")
+    
+    # Torch device
+    parser.add_argument("--gpu_num", type=int, default=0)
 
     args = vars(parser.parse_args())
     return args
+
+# torch device state
+print("=============== Device setup ===============")
+print("torch cuda avaliable : ", torch.cuda.is_available())
+print("torch current gpu : ", torch.cuda.current_device())
+print("torch available gpus : ", torch.cuda.device_count())
+
+# torch cuda initialize and clear cache
+torch.cuda.init()
+torch.cuda.empty_cache()
 
 if __name__ == "__main__":
 
@@ -72,6 +85,12 @@ if __name__ == "__main__":
     tag = args['tag']
     savepath = os.path.join(args["save_plot"], args['simcase'])
     filepath = os.path.join(args['save_file'], args['simcase'])
+    
+    # device allocation
+    if(torch.cuda.device_count() >= 1):
+        device = "cuda:" + str(args["gpu_num"])
+    else:
+        device = 'cpu'
 
     # Directory check
     if not os.path.exists(savepath):
@@ -109,6 +128,8 @@ if __name__ == "__main__":
     input_dim = args['num_particle'] * 2
     n_actions = 2 * args['max_mode']
     network = ActorCritic(input_dim, args['mlp_dim'], n_actions, args['std'], output_min = args['coeff_min'], output_max = args['coeff_max'])
+    network.to(device)
+    
     optimizer = torch.optim.RMSprop(network.parameters(), lr = args['lr'])
 
     # maximum simulation time (integer)
@@ -127,7 +148,7 @@ if __name__ == "__main__":
         args['gamma'], 
         args['eps_clip'], 
         args['entropy_coeff'],
-        "cpu", 
+        device, 
         args['num_episode'], 
         Nt, 
         args['verbose'], 
@@ -156,6 +177,7 @@ if __name__ == "__main__":
     coeff_sin = []
     
     sim.reinit()
+    network.cpu()
 
     for idx_t in tqdm(range(Nt), "PIC simulation with E-field control"):
         

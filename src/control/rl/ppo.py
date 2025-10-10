@@ -142,7 +142,7 @@ def update_policy(
         device = "cpu"
     
     if criterion is None:
-        criterion = nn.SmoothL1Loss(reduction = 'none') # Huber Loss for critic network
+        criterion = nn.SmoothL1Loss() # Huber Loss for critic network
     
     transitions = memory.get_trajectory()
     memory.clear()
@@ -150,9 +150,9 @@ def update_policy(
  
     non_final_next_states = torch.cat([s for s in batch.next_state if s is not None]).to(device)
 
+    done_batch = torch.cat(batch.done).to(device)
     state_batch = torch.cat(batch.state).float().to(device)
-    action_batch = torch.cat(batch.action).float().to(device)
-    prob_a_batch = torch.cat(batch.prob_a).float().to(device) # pi_old
+    prob_a_batch = torch.cat(batch.prob_a).float().to(device)
         
     # Multi-step version reward: Monte Carlo estimate
     rewards = []
@@ -165,10 +165,10 @@ def update_policy(
     
     policy_optimizer.zero_grad()
     
-    _, _, next_log_probs, next_value = policy_network.sample(non_final_next_states)
-    action, entropy, log_probs, value = policy_network.sample(state_batch)
+    _, _, _, next_value = policy_network.sample(non_final_next_states)
+    _, entropy, log_probs, value = policy_network.sample(state_batch)
     
-    td_target = reward_batch.view_as(next_value) + gamma * next_value
+    td_target = reward_batch.view_as(next_value) + gamma * next_value * (1-done_batch)
     
     delta = td_target - value        
     ratio = torch.exp(log_probs - prob_a_batch.detach())
@@ -261,13 +261,13 @@ def train(
                     device,
                 )
 
-                reward_list.append(reward)
-                loss_list.append(policy_loss.detach().cpu().numpy())
+                reward_list.append(reward.item())
+                loss_list.append(policy_loss.detach().cpu().numpy().item())
 
                 # save the weight parameters
                 torch.save(policy_network.state_dict(), save_last)
 
-            if done:
+            if done and idx_t < Nt - 1:
                 print("| episode:{} | simulation terminated with progress: {:.1f} percent".format(i_episode+1, 100 * (idx_t + 1)/Nt))
                 break
 
