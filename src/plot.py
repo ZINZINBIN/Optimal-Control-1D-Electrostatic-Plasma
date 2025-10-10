@@ -554,7 +554,6 @@ def plot_log_E(
     dx:float,
     N_mesh:float,
     snapshot:np.ndarray,
-    prediction:Optional[np.ndarray],
     save_dir:Optional[str],
     filename:Optional[str],
 ):
@@ -582,32 +581,17 @@ def plot_log_E(
     E_real_list = [compute_E(snapshot[:,i].reshape(-1,1), dx, N_mesh, 1.0, L, N, G, Lap)[1] for i in range(Nt)]
     E2_real = np.array([np.mean(E_real_list[i].ravel() ** 2) for i in range(Nt)])
 
-    if prediction is not None:
-        E_pred_list = [compute_E(prediction[:,i].reshape(-1,1), dx, N_mesh, 1.0, L, N, G, Lap)[1] for i in range(Nt)]
-        E2_pred = np.array([np.mean(E_pred_list[i].ravel() ** 2) for i in range(Nt)])
-    else:
-        E_pred_list = None
-        E2_pred = None
+    fig, ax = plt.subplots(1, 1, figsize=(5, 3), facecolor="white", dpi=120)
 
-    fig, ax = plt.subplots(1, 1, figsize=(6, 4), facecolor="white", dpi=120)
-
-    ax.plot(ts, E2_real, "b", label="FOM")
-
-    if prediction is not None:
-        ax.plot(ts, E2_pred, "r", label="ROM")
-
+    ax.plot(ts, E2_real)
     ax.set_xlabel("Timestep")
     ax.set_ylabel(r"$\log <E^2>$")
     ax.set_yscale("log")
-    ax.legend(loc="upper right")
-
     fig.tight_layout()
 
     if filepath is not None:
         plt.savefig(filepath, dpi=120)
 
-    plt.close()
-    
     return fig, ax
 
 def plot_E_k_spectrum(
@@ -616,7 +600,6 @@ def plot_E_k_spectrum(
     dx:float,
     N_mesh:float,
     snapshot:np.ndarray,
-    prediction:Optional[np.ndarray],
     save_dir:Optional[str],
     filename:Optional[str],
 ):
@@ -639,43 +622,18 @@ def plot_E_k_spectrum(
 
     ks_real, Ek_t_spectrum_real = compute_E_k_spectrum(1.0, L, dx, N_mesh, snapshot)
 
-    if prediction is not None:
-        ks_pred, Ek_t_spectrum_pred = compute_E_k_spectrum(1.0, L, dx, N_mesh, prediction)
-    else:
-        ks_pred = None
-        Ek_t_spectrum_pred = None
-
-    if prediction is not None:
-        fig, axes = plt.subplots(2, 1, figsize=(6, 6), facecolor="white", dpi=120)
-        axes = axes.ravel()
-        
-        axes[0].imshow(Ek_t_spectrum_real, extent=[0,tmax,ks_real[0], ks_real[-1]], aspect='auto', origin='lower')
-        axes[0].set_ylabel(r"$k$")
-        axes[0].set_title(r"$E_k$")
-        axes[0].set_ylim([0, 1.0])
-        axes[0].grid(True)
-        
-        axes[1].imshow(Ek_t_spectrum_pred, extent=[0,tmax,ks_pred[0], ks_pred[-1]], aspect='auto', origin='lower')
-        axes[1].set_xlabel(r"$t$")
-        axes[1].set_ylabel(r"$k$")
-        axes[1].set_title(r"$E_k$")
-        axes[1].set_ylim([0, 1.0])
-        axes[1].grid(True)
-    else:
-        fig, axes = plt.subplots(1, 1, figsize=(6, 3), facecolor="white", dpi=120)
-        
-        axes.imshow(Ek_t_spectrum_real, extent=[0,tmax,ks_real[0], ks_real[-1]], aspect='auto', origin='lower')
-        axes.set_xlabel(r"$t$")
-        axes.set_ylabel(r"$k$")
-        axes.set_title(r"$E_k$")
-        axes.set_ylim([0, 1.0])
-        axes.grid(True)
+    fig, ax = plt.subplots(1, 1, figsize=(6, 3), facecolor="white", dpi=120)
+    
+    ax.imshow(Ek_t_spectrum_real, extent=[0,tmax,ks_real[0], ks_real[-1]], aspect='auto', origin='lower')
+    ax.set_xlabel(r"$t$")
+    ax.set_ylabel(r"$k$")
+    ax.set_title(r"$E_k$")
+    ax.set_ylim([0, 1.0])
+    ax.grid(True)
 
     fig.tight_layout()
 
     if filepath is not None:
         plt.savefig(filepath, dpi=120)
 
-    plt.close()
-
-    return fig, axes
+    return fig, ax
