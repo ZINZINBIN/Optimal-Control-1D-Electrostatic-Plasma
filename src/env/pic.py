@@ -61,18 +61,16 @@ class PIC:
         self.initialize()
 
     def initialize(self):
+        self.init_dist.reinit()
         x, v = self.init_dist.get_sample()
         self.x = x.reshape(-1, 1)
         self.v = v.reshape(-1, 1)
         self.v *= (1 + self.A * np.sin(2 * np.pi * self.n_mode * self.x / self.L))  # add perturbation
 
         # check CFL condition for stability
-        print("CFL condition check")
         if self.dt > 2 / np.sqrt(self.N / self.L):
             self.dt = 2 / np.sqrt(self.N / self.L)
             print("CFL condtion invalid: change dt = {:.4f}".format(self.dt))
-        else:
-            print("CFL condtion valid: dt = {:.4f}".format(self.dt))
 
         # update density and corresponding electric field
         self.update_density()

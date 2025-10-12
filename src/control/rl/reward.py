@@ -36,8 +36,13 @@ class Reward:
         PE = np.sum(actions ** 2) * self.L / 2
         return PE
     
-    def compute_reward(self, state:np.ndarray, action:np.ndarray):
-        r_kl = self.compute_kl_divergence(state) * (-1)
-        r_pe = self.compute_electric_energy(state) * (-1)
-        r_in = self.compute_input_energy(action) * (-1)
+    def compute_cost(self, state:np.ndarray, action:np.ndarray):
+        r_kl = self.compute_kl_divergence(state)
+        r_pe = self.compute_electric_energy(state)
+        r_in = self.compute_input_energy(action)
         return r_kl + self.alpha * r_pe + self.beta * r_in
+    
+    def compute_reward(self, state:np.ndarray, action:np.ndarray):
+        cost = self.compute_cost(state, action)
+        reward = 1.0 - np.tanh(cost)
+        return reward

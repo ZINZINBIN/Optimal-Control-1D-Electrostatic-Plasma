@@ -100,7 +100,8 @@ if __name__ == "__main__":
         actuator.update_E()
         
         # Get action
-        E_external = actuator.compute_E()
+        # E_external = actuator.compute_E()
+        E_external = None
 
         # Update motion
         sim.update_state(E_external)
