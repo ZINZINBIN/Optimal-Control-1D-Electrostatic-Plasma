@@ -174,11 +174,11 @@ def update_policy(
         
         td_target = reward_batch.view_as(next_value) + gamma * next_value
         
-        delta = (td_target - value).detach()       
+        delta = td_target - value     
         ratio = torch.exp(log_probs - prob_a_batch.detach())
         
-        surr1 = ratio * delta
-        surr2 = torch.clamp(ratio, 1 - eps_clip, 1 + eps_clip) * delta
+        surr1 = ratio * delta.detach()
+        surr2 = torch.clamp(ratio, 1 - eps_clip, 1 + eps_clip) * delta.detach()
         loss = -torch.min(surr1, surr2) + value_coeff * criterion(value, td_target) - entropy_coeff * entropy
         loss = loss.mean()
         loss.backward()

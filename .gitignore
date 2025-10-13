@@ -11,6 +11,9 @@
 *.pkl
 *.pickle
 
+# pt
+*.pt
+
 # log file
 *.err
 *.out

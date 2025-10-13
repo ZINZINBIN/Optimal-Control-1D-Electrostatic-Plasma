@@ -14,8 +14,7 @@ def estimate_f(state:np.ndarray, N_mesh:int, L:float, vmin:float, vmax:float, n0
     return dist
 
 def estimate_KL_divergence(f:np.ndarray, feq:np.ndarray, dx:float = 0.1, dv:float = 0.04):
-    mask = (f != 0) & (feq != 0)
-    kl_div = np.sum(rel_entr(f[mask], feq[mask] + eps)) * dx * dv
+    kl_div = np.sum(rel_entr(f, feq + eps)) * dx * dv
     return kl_div
 
 def estimate_electric_energy(state:np.ndarray, E_external:Optional[np.ndarray], N_mesh:int, L:float, n0:float):

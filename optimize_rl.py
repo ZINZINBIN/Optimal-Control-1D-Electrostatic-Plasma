@@ -6,6 +6,7 @@ from src.env.pic import PIC
 from src.env.dist import BumpOnTail, TwoStream
 from src.control.actuator import E_field
 from src.control.rl.ppo import ActorCritic, train, ReplayBuffer
+from src.plot import plot_two_stream_evolution, plot_bump_on_tail_evolution, plot_log_E, plot_E_k_spectrum
 
 def parsing():
     parser = argparse.ArgumentParser(description="Optimization of RL for optimal control in Vlasov-Poisson plasma kinetic system")
@@ -44,14 +45,14 @@ def parsing():
 
     # Controller
     parser.add_argument("--max_mode", type = int, default = 3)
-    parser.add_argument("--coeff_max", type=float, default= 2.0)
-    parser.add_argument("--coeff_min", type=float, default= -2.0)
+    parser.add_argument("--coeff_max", type=float, default= 5.0)
+    parser.add_argument("--coeff_min", type=float, default= -5.0)
 
     # Network
     parser.add_argument("--mlp_dim", type = int, default = 32)
     parser.add_argument("--r", type =float, default = 0.995)
     parser.add_argument("--std", type = float, default = 0.5)
-    parser.add_argument("--capacity", type=int, default=50)
+    parser.add_argument("--capacity", type=int, default=10)
     parser.add_argument("--eps_clip", type=float, default=0.25)
     parser.add_argument("--entropy_coeff", type=float, default=0.10)
     parser.add_argument("--value_coeff", type=float, default=0.25)
@@ -61,8 +62,8 @@ def parsing():
     parser.add_argument("--k_epoch", type=int, default=4)
 
     # Cost parameters
-    parser.add_argument("--alpha", type=float, default=1e-5)
-    parser.add_argument("--beta", type=float, default=0.0)
+    parser.add_argument("--alpha", type=float, default=0.0)
+    parser.add_argument("--beta", type=float, default=0.1)
     parser.add_argument("--save_last", type=str, default="ppo_last.pt")
     parser.add_argument("--save_best", type=str, default="ppo_best.pt")
     
@@ -92,6 +93,12 @@ if __name__ == "__main__":
     tag = args['tag']
     savepath = os.path.join(args["save_plot"], args['simcase'])
     filepath = os.path.join(args['save_file'], args['simcase'])
+    
+    # Information
+    print("=============== Information ================")
+    print("Simulation : {}".format(args['simcase']))
+    print("RL algorithm : PPO")
+    print("Input mode number : {}".format(args['max_mode']))
     
     # device allocation
     if(torch.cuda.device_count() >= 1):
@@ -255,3 +262,16 @@ if __name__ == "__main__":
 
     # save data
     savemat(file_name = os.path.join(filepath, "{}.mat".format(tag)), mdict=mdic, do_compression=True)
+    
+    # Plot the result
+    if args['simcase'] == "two-stream":
+        plot_two_stream_evolution(snapshot, savepath, "phase_space_evolution.pdf", 0, args['L'], -10.0, 10.0)
+        
+    elif args['simcase'] == "bump-on-tail":
+        plot_bump_on_tail_evolution(snapshot, savepath, "phase_space_evolution.pdf", 0, args['L'], -10.0, 10.0)
+    
+    # Electric energy
+    plot_log_E(args['t_max'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], snapshot, savepath, "log_E.pdf")
+    
+    # Electric field spectrum
+    plot_E_k_spectrum(args['t_max'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], snapshot, savepath, "E_k_spectrum.pdf")

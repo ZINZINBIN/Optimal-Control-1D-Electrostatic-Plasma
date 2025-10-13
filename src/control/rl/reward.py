@@ -43,6 +43,8 @@ class Reward:
         return r_kl + self.alpha * r_pe + self.beta * r_in
     
     def compute_reward(self, state:np.ndarray, action:np.ndarray):
-        cost = self.compute_cost(state, action)
-        reward = 1.0 - np.tanh(cost)
+        r_kl = np.tanh(1 - (self.compute_kl_divergence(state) / 21.5)**2)
+        r_pe = np.tanh(1 - np.sqrt(self.compute_electric_energy(state) / 500.0))
+        r_in = np.tanh(1 - np.sqrt(self.compute_input_energy(action) / 150.0))
+        reward = r_kl + self.alpha * r_pe + self.beta * r_in
         return reward
