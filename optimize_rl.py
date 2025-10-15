@@ -44,9 +44,9 @@ def parsing():
     parser.add_argument("--a", type = float, default = 0.2)   
 
     # Controller
-    parser.add_argument("--max_mode", type = int, default = 3)
-    parser.add_argument("--coeff_max", type=float, default= 5.0)
-    parser.add_argument("--coeff_min", type=float, default= -5.0)
+    parser.add_argument("--max_mode", type = int, default = 4)
+    parser.add_argument("--coeff_max", type=float, default= 1.0)
+    parser.add_argument("--coeff_min", type=float, default= -1.0)
 
     # Network
     parser.add_argument("--mlp_dim", type = int, default = 32)
@@ -62,8 +62,8 @@ def parsing():
     parser.add_argument("--k_epoch", type=int, default=4)
 
     # Cost parameters
-    parser.add_argument("--alpha", type=float, default=0.0)
-    parser.add_argument("--beta", type=float, default=0.1)
+    parser.add_argument("--alpha", type=float, default=0.25)
+    parser.add_argument("--beta", type=float, default=0.25)
     parser.add_argument("--save_last", type=str, default="ppo_last.pt")
     parser.add_argument("--save_best", type=str, default="ppo_best.pt")
     

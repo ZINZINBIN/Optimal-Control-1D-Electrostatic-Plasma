@@ -179,7 +179,7 @@ def update_policy(
         
         surr1 = ratio * delta.detach()
         surr2 = torch.clamp(ratio, 1 - eps_clip, 1 + eps_clip) * delta.detach()
-        loss = -torch.min(surr1, surr2) + value_coeff * criterion(value, td_target) - entropy_coeff * entropy
+        loss = -torch.min(surr1, surr2) + value_coeff * criterion(value, td_target.detach()) - entropy_coeff * entropy
         loss = loss.mean()
         loss.backward()
         
@@ -220,7 +220,7 @@ def train(
         device = "cpu"
 
     # Reward class
-    reward_cls = Reward(env.init_dist.get_init_state(), env.N_mesh, env.L, -10.0, 10.0, env.n0, alpha, beta)
+    reward_cls = Reward(env.init_dist.get_init_state(), env.N_mesh, env.L, -25.0, 25.0, env.n0, alpha, beta)
     
     # Trajectory
     loss_traj = []

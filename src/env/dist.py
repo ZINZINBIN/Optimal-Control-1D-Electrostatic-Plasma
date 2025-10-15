@@ -49,10 +49,10 @@ class TwoStream(BasicDistribution):
         self.initialize(self.n_samples)
 
     def get_sample(self):
-        return self.x_init, self.v_init
+        return self.x_init.copy(), self.v_init.copy()
 
     def get_init_state(self):
-        return np.concatenate([self.x_init.reshape(-1,1), self.v_init.reshape(-1,1)], axis = 0)
+        return np.concatenate([self.x_init.copy().reshape(-1,1), self.v_init.copy().reshape(-1,1)], axis = 0)
 
     def update_params(self, **kwargs):
         for key in kwargs.keys():
@@ -129,10 +129,10 @@ class BumpOnTail(BasicDistribution):
         self.initialize(self.n_samples)
 
     def get_sample(self):
-        return self.x_init, self.v_init
-    
+        return self.x_init.copy(), self.v_init.copy()
+
     def get_init_state(self):
-        return np.concatenate([self.x_init.reshape(-1,1), self.v_init.reshape(-1,1)], axis = 0)
+        return np.concatenate([self.x_init.copy().reshape(-1,1), self.v_init.copy().reshape(-1,1)], axis = 0)
 
     def update_params(self, **kwargs):
         for key in kwargs.keys():
