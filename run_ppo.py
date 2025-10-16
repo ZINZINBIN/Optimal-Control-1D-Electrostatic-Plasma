@@ -1,12 +1,12 @@
 import numpy as np
-import os, argparse, torch, gc
+import os, argparse, torch
 from tqdm.auto import tqdm
 from scipy.io import savemat
 from src.env.pic import PIC
 from src.env.dist import BumpOnTail, TwoStream
 from src.control.actuator import E_field
-from src.control.rl.sac import ReplayBuffer, Actor, Critic, train
-from src.plot import plot_two_stream_evolution, plot_bump_on_tail_evolution, plot_log_E, plot_E_k_spectrum
+from src.control.rl.ppo import ActorCritic, train, ReplayBuffer
+from src.plot import plot_two_stream_evolution, plot_bump_on_tail_evolution, plot_log_E, plot_E_k_spectrum, plot_E_k_over_time
 
 def parsing():
     parser = argparse.ArgumentParser(description="Optimization of RL for optimal control in Vlasov-Poisson plasma kinetic system")
@@ -17,7 +17,6 @@ def parsing():
     parser.add_argument("--gamma", type=float, default=5.0)
     parser.add_argument("--save_plot", type=str, default="./result/")
     parser.add_argument("--save_file", type=str, default="./dataset/")
-    parser.add_argument("--tag", type=str, default="sac-control")
 
     # PIC parameters (default)
     parser.add_argument("--num_particle", type = int, default = 10000)  
@@ -44,7 +43,7 @@ def parsing():
     parser.add_argument("--a", type = float, default = 0.2)   
 
     # Controller
-    parser.add_argument("--max_mode", type = int, default = 4)
+    parser.add_argument("--max_mode", type = int, default = 5)
     parser.add_argument("--coeff_max", type=float, default= 1.0)
     parser.add_argument("--coeff_min", type=float, default= -1.0)
 
@@ -52,18 +51,20 @@ def parsing():
     parser.add_argument("--mlp_dim", type = int, default = 32)
     parser.add_argument("--r", type =float, default = 0.995)
     parser.add_argument("--std", type = float, default = 0.5)
-    parser.add_argument("--tau", type = float, default = 0.5)
-    parser.add_argument("--capacity", type=int, default=256)
-    parser.add_argument("--batch_size", type = int, default = 64)
+    parser.add_argument("--capacity", type=int, default=10)
+    parser.add_argument("--eps_clip", type=float, default=0.25)
+    parser.add_argument("--entropy_coeff", type=float, default=0.10)
+    parser.add_argument("--value_coeff", type=float, default=0.25)
     parser.add_argument("--num_episode", type=int, default=1000)
     parser.add_argument("--verbose", type=int, default=10)
     parser.add_argument("--lr", type=float, default=5e-4)
+    parser.add_argument("--k_epoch", type=int, default=4)
 
     # Cost parameters
-    parser.add_argument("--alpha", type=float, default=0.25)
-    parser.add_argument("--beta", type=float, default=0.25)
-    parser.add_argument("--save_last", type=str, default="sac_last.pt")
-    parser.add_argument("--save_best", type=str, default="sac_best.pt")
+    parser.add_argument("--alpha", type=float, default=1.0)
+    parser.add_argument("--beta", type=float, default=0.1)
+    parser.add_argument("--save_last", type=str, default="ppo_last.pt")
+    parser.add_argument("--save_best", type=str, default="ppo_best.pt")
     
     # Torch device
     parser.add_argument("--gpu_num", type=int, default=0)
@@ -84,16 +85,12 @@ print("torch available gpus : ", torch.cuda.device_count())
 torch.cuda.init()
 torch.cuda.empty_cache()
 
-# memory cache delete
-gc.collect()
-
 if __name__ == "__main__":
 
     args = parsing()
 
-    tag = args['tag']
-    savepath = os.path.join(args["save_plot"], args['simcase'])
-    filepath = os.path.join(args['save_file'], args['simcase'])
+    savepath = os.path.join(args["save_plot"], args['simcase'], "ppo-control")
+    filepath = os.path.join(args['save_file'], args['simcase'], "ppo-control")
     
     # Information
     print("=============== Information ================")
@@ -142,21 +139,10 @@ if __name__ == "__main__":
     # Controller
     input_dim = args['num_particle'] * 2
     n_actions = 2 * args['max_mode']
-    
-    p_network = Actor(input_dim, args['mlp_dim'], n_actions)
-    q_network = Critic(input_dim, args['mlp_dim'], n_actions)
-    target_q_network = Critic(input_dim, args['mlp_dim'], n_actions)
-    
-    p_network.to(device)
-    q_network.to(device)
-    target_q_network.to(device)
-    
-    log_alpha = torch.zeros(1, dtype = torch.float32, device = device, requires_grad=True)
-    target_entropy = -torch.prod(torch.Tensor((n_actions,))).item()
-    
-    q_optimizer = torch.optim.Adam(q_network.parameters(), lr = args['lr'])
-    p_optimizer = torch.optim.Adam(p_network.parameters(), lr = args['lr'])
-    a_optimizer = torch.optim.Adam([log_alpha], lr = args['lr'])
+    network = ActorCritic(input_dim, args['mlp_dim'], n_actions, args['std'], output_min = args['coeff_min'], output_max = args['coeff_max'])
+    network.to(device)
+
+    optimizer = torch.optim.Adam(network.parameters(), lr = args['lr'])
 
     # maximum simulation time (integer)
     Nt = int(np.ceil((args['t_max'] - args['t_min']) / args['dt']))
@@ -165,30 +151,27 @@ if __name__ == "__main__":
     memory = ReplayBuffer(args['capacity'])
     
     if args['optimize']:
+        
         reward, loss = train(
             sim, 
             actuator, 
             memory, 
-            q_network,
-            p_network,
-            target_q_network,
-            target_entropy,
-            log_alpha,
-            p_optimizer,
-            q_optimizer,
-            a_optimizer,
-            None,
-            args['batch_size'],
-            args['tau'],
-            args['r'],
-            device,
-            args['num_episode'],
-            Nt,
-            args['verbose'],
+            network, 
+            optimizer, 
+            None, 
+            args['r'], 
+            args['eps_clip'], 
+            args['entropy_coeff'],
+            args['value_coeff'],
+            device, 
+            args['num_episode'], 
+            Nt, 
+            args['verbose'], 
             os.path.join(filepath, args['save_last']),
             os.path.join(filepath, args['save_best']),
             args['alpha'],
-            args['beta']
+            args['beta'],
+            args['k_epoch']
         )
         
         # save optimization process
@@ -198,7 +181,7 @@ if __name__ == "__main__":
         }
 
         # save data
-        savemat(file_name = os.path.join(filepath, "optim_{}.mat".format(tag)), mdict=mdic, do_compression=True)
+        savemat(file_name = os.path.join(filepath, "process.mat"), mdict=mdic, do_compression=True)
 
     # Trajectory of the system's state
     pos_list = []
@@ -214,17 +197,17 @@ if __name__ == "__main__":
     sim.reinit()
     
     # load best model
-    p_network.load_state_dict(torch.load(os.path.join(filepath, args['save_best'])))
-    p_network.cpu()
+    network.load_state_dict(torch.load(os.path.join(filepath, args['save_best'])))
+    network.cpu()
     
     # no gradient
-    p_network.eval()
+    network.eval()
 
     for idx_t in tqdm(range(Nt), "PIC simulation with E-field control"):
         
         # Update coefficients
         state = sim.get_state()
-        coeffs = p_network.get_action(state, "cpu")
+        coeffs = network.get_action(state)
         actuator.update_E(coeffs[:args['max_mode']], coeffs[args['max_mode']:])
 
         # Get action
@@ -276,7 +259,7 @@ if __name__ == "__main__":
     }
 
     # save data
-    savemat(file_name = os.path.join(filepath, "{}.mat".format(tag)), mdict=mdic, do_compression=True)
+    savemat(file_name = os.path.join(filepath, "data.mat"), mdict=mdic, do_compression=True)
     
     # Plot the result
     if args['simcase'] == "two-stream":
@@ -286,7 +269,10 @@ if __name__ == "__main__":
         plot_bump_on_tail_evolution(snapshot, savepath, "phase_space_evolution.pdf", 0, args['L'], -10.0, 10.0)
     
     # Electric energy
-    plot_log_E(args['tmax'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], snapshot, savepath, "log_E.pdf")
+    plot_log_E(args['t_max'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], snapshot, savepath, "log_E.pdf")
     
     # Electric field spectrum
-    plot_E_k_spectrum(args['tmax'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], snapshot, savepath, "E_k_spectrum.pdf")
+    plot_E_k_spectrum(args['t_max'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], snapshot, savepath, "E_k_spectrum.pdf")
+    
+    # Fourier coefficient over time
+    plot_E_k_over_time(args['t_max'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], args['max_mode'], snapshot, savepath, "Ek_t.pdf")

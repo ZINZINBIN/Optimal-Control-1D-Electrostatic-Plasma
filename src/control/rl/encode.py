@@ -1,52 +1,51 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch_geometric.nn import GCNConv
 
 class Encoder(nn.Module):
-    def __init__(self, input_dim : int, conv_dim : int = 32, conv_kernel : int = 3, conv_stride : int = 2, conv_padding : int = 1):
+    def __init__(self, num_nodes:int, input_dim:int, hidden_dim:int, output_dim:int):
         super(Encoder, self).__init__()
         self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.output_dim = output_dim
+        self.num_nodes = num_nodes
         
-        self.conv_dim = conv_dim
-        self.conv_kernel = conv_kernel
-        self.conv_stride = conv_stride
-        self.conv_padding = conv_padding
+        # Graph Convolutional Layers
+        self.conv1 = GCNConv(input_dim, hidden_dim)
+        self.conv2 = GCNConv(hidden_dim, hidden_dim)
+
+        # Fully Connected Layer for Encoding
+        self.fc = nn.Linear(hidden_dim, output_dim)
         
-        # temporal convolution
-        self.layer_1 = nn.Sequential(
-            nn.Conv1d(in_channels = input_dim, out_channels = conv_dim, kernel_size = conv_kernel, stride = conv_stride, padding = conv_padding),
-            nn.BatchNorm1d(conv_dim),
-            nn.ReLU(),
-            nn.Conv1d(in_channels = conv_dim, out_channels = conv_dim, kernel_size = conv_kernel, stride = conv_stride, padding = conv_padding),
-            nn.BatchNorm1d(conv_dim),
-            nn.ReLU(),
-        )    
+        # Create all possible edges (including self-loops)
+        row = torch.arange(num_nodes).repeat(num_nodes)
+        col = torch.arange(num_nodes).repeat_interleave(num_nodes)
+
+        # Remove self-loops
+        mask = row != col
+        self.edge_index = torch.stack([row[mask], col[mask]], dim=0)
         
-        self.feature_dim = conv_dim
-        
-    def forward(self, x : torch.Tensor):
-        
-        # normalization
-        x = F.normalize(x, dim = 0)
-        
-        # x : (B, T, D)
-        if x.ndim == 2:
-            x = x.unsqueeze(0)
-        
-        # x : (B, D, T)
-        if x.size()[2] != self.seq_len:
-            x = x.permute(0,2,1)
-        
-        # x : (B, conv_dim, T')
-        x = self.layer_1(x)
-        
-        # x : (B, conv_dim, pred_len)
-        x = self.layer_2(x)
-        
-        # x : (B, pred_len, conv_dim)
-        x = x.permute(0,2,1)
-        
+    def forward(self, x:torch.Tensor):
+        # Graph Convolution Layers
+        x = F.relu(self.conv1(x, self.edge_index.to(x.device)))
+        x = F.relu(self.conv2(x, self.edge_index.to(x.device)))
+
+        # Fully Connected Layer
+        x = self.fc(x)
         return x
     
-    def compute_conv1d_output_dim(self, input_dim : int, kernel_size : int = 3, stride : int = 1, padding : int = 1, dilation : int = 1):
-        return int((input_dim + 2 * padding - dilation * (kernel_size - 1) - 1) / stride + 1)
+if __name__ == "__main__":
+    
+    batch_size = 10
+    num_node = 100
+    input_dim = 2
+    hidden_dim = 10
+    output_dim = 10
+    
+    encoder = Encoder(num_node, input_dim, hidden_dim, output_dim)
+    
+    x = torch.zeros((batch_size, num_node, input_dim))
+    x_encode = encoder(x)
+    
+    print(x_encode.size())

@@ -1,6 +1,3 @@
-# .pdf file
-*.pdf
-
 # .zip file
 *.zip
 
@@ -11,7 +8,7 @@
 *.pkl
 *.pickle
 
-# pt
+# weight file
 *.pt
 
 # log file

@@ -367,7 +367,7 @@ def train(
             memory.push(state_tensor, action_tensor, next_state_tensor, reward_tensor, done)
 
             # update policy
-            if memory.__len__() >= batch_size and idx_t % batch_size == 0:
+            if memory.__len__() >= batch_size and idx_t % (batch_size // 4) == 0:
 
                 _, _, p_loss = update_policy(
                     memory,

@@ -177,8 +177,8 @@ def update_policy(
         delta = td_target - value     
         ratio = torch.exp(log_probs - prob_a_batch.detach())
         
-        surr1 = ratio * delta.detach()
-        surr2 = torch.clamp(ratio, 1 - eps_clip, 1 + eps_clip) * delta.detach()
+        surr1 = ratio * delta
+        surr2 = torch.clamp(ratio, 1 - eps_clip, 1 + eps_clip) * delta
         loss = -torch.min(surr1, surr2) + value_coeff * criterion(value, td_target.detach()) - entropy_coeff * entropy
         loss = loss.mean()
         loss.backward()

@@ -12,6 +12,7 @@ from src.env.dist import BumpOnTail, TwoStream
 from src.control.actuator import E_field
 from src.control.rl.reward import Reward
 from src.env.dist import TwoStream
+from src.env.util import compute_E
 
 def parsing():
     parser = argparse.ArgumentParser(description="Vlasov-Poisson plasma kinetic simulation with an external electric field")
@@ -48,7 +49,7 @@ def parsing():
     parser.add_argument("--a", type = float, default = 0.2)   
     
     # Controller
-    parser.add_argument("--max_mode", type = int, default = 3)
+    parser.add_argument("--max_mode", type = int, default = 5)
 
     args = vars(parser.parse_args())
     return args
@@ -96,8 +97,7 @@ if __name__ == "__main__":
     print(reward.compute_reward_electric_energy(state))
     print(reward.compute_reward_input_energy(action))
     
-    
-    with open("./dataset/two-stream/wo-oc.mat", "rb") as file:
+    with open(os.path.join(args["save_file"], args['simcase'], "wo-oc", "data.mat"), "rb") as file:
         mdat = loadmat(file)
         
     snapshot = mdat["snapshot"]
@@ -114,7 +114,6 @@ if __name__ == "__main__":
     dt = mdat["dt"][0].item()
     ts = np.linspace(tmin, tmax, Nt)
     
-    
     print(reward.compute_reward_kl_divergence(snapshot[:,0]))
     print(reward.compute_reward_kl_divergence(snapshot[:,500]))
     print(reward.compute_reward_kl_divergence(snapshot[:,-1]))
@@ -129,36 +128,25 @@ if __name__ == "__main__":
     print(estimate_KL_divergence(fm, f0, dx, 0.1))
     print(estimate_KL_divergence(ff, f0, dx, 0.1))
     
-    # Gradient and Laplacian
-    from src.env.util import generate_grad, generate_laplacian, compute_E
+    from src.interpret.spectrum import compute_E_k_spectrum
+    ks, Eks = compute_E_k_spectrum(args['n0'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], snapshot, False)
+
+    ks = ks[1:args['max_mode'] + 1]
+    Eks = Eks[1:args['max_mode'] + 1,:]
     
-    G = generate_grad(L, N_mesh)
-    Lap = generate_laplacian(L, N_mesh)
-
-    E_mesh_t = [compute_E(snapshot[:, i].reshape(-1, 1), dx, N_mesh, 1.0, L, N, G, Lap)[1] for i in range(Nt)]
-    E_mesh_t_arr = np.concatenate(E_mesh_t, axis=1) # (N_mesh, Nt)
-
-    Ek_t = np.fft.fft(E_mesh_t_arr, axis=0) / N_mesh
-    ks = np.fft.fftfreq(N_mesh, d = dx) * 2.0 * np.pi
-    Ek_t_spectrum = np.abs(Ek_t)
-
-    # masking for positive value
-    mask = ks >= 0
-    ks = ks[mask]
-    Ek_t_spectrum = Ek_t_spectrum[mask, :]
+    # Trajectory of the input control
+    coeff_cos = [np.real(Eks[:,idx_t]).reshape(-1,1) for idx_t in range(Nt)]
+    coeff_sin = [(-1) * np.imag(Eks[:,idx_t]).reshape(-1,1) for idx_t in range(Nt)]
+    
+    actuator.update_E(coeff_cos[-1], coeff_sin[-1])
+    
+    _, E_m = compute_E(snapshot[:,-1].reshape(-1,1), args['L'] / args['num_mesh'], args['num_mesh'], 1.0, args['L'], args['num_particle'])
     
     import matplotlib.pyplot as plt
     
-    plt.plot(ts, Ek_t_spectrum[0,:], label = "n = 0")
-    plt.plot(ts, Ek_t_spectrum[1,:], label = "n = 1")
-    plt.plot(ts, Ek_t_spectrum[2,:], label = "n = 2")
-    plt.plot(ts, Ek_t_spectrum[3,:], label = "n = 3")
-    plt.plot(ts, Ek_t_spectrum[4,:], label = "n = 4")
-    plt.plot(ts, Ek_t_spectrum[5,:], label = "n = 5")
-    plt.plot(ts, Ek_t_spectrum[6,:], label = "n = 6")
-    plt.plot(ts, Ek_t_spectrum[7,:], label = "n = 7")
-    plt.plot(ts, Ek_t_spectrum[8,:], label = "n = 8")
-    plt.legend()
-    plt.savefig("spectrum.png")
+    print(np.linalg.norm(actuator.compute_E() - E_m))
     
-    breakpoint()
+    plt.plot(actuator.xm, actuator.compute_E(), label = "IFFT")
+    plt.plot(actuator.xm, E_m, label = "GT")
+    plt.legend()
+    plt.savefig("e_field.png")

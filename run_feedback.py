@@ -5,16 +5,18 @@ from tqdm.auto import tqdm
 from src.env.pic import PIC
 from src.env.dist import BumpOnTail, TwoStream
 from src.control.actuator import E_field
+from src.interpret.spectrum import compute_E_k_spectrum
+from src.plot import plot_E_k_spectrum, plot_log_E, plot_E_k_over_time, plot_bump_on_tail_evolution, plot_two_stream_evolution
 
 def parsing():
-    parser = argparse.ArgumentParser(description="Vlasov-Poisson plasma kinetic simulation with an external electric field")
+    parser = argparse.ArgumentParser(description="Vlasov-Poisson plasma kinetic simulation with feedback E-field control")
 
     # Simulation setting
     parser.add_argument("--simcase", type = str, default = "two-stream", choices=["two-stream", "bump-on-tail"])
     parser.add_argument("--interpol", type=str, default = "CIC", choices=["CIC", "TSC"])
     parser.add_argument("--gamma", type=float, default=5.0)
     parser.add_argument("--save_file", type=str, default="./dataset/")
-    parser.add_argument("--tag", type=str, default="test")
+    parser.add_argument("--save_plot", type=str, default="./result/")
 
     # PIC parameters (default)
     parser.add_argument("--num_particle", type = int, default = 10000)  
@@ -41,7 +43,9 @@ def parsing():
     parser.add_argument("--a", type = float, default = 0.2)   
     
     # Controller
-    parser.add_argument("--max_mode", type = int, default = 3)
+    parser.add_argument("--max_mode", type = int, default = 5)
+    parser.add_argument("--coeff_max", type=float, default= 1.0)
+    parser.add_argument("--coeff_min", type=float, default= -1.0)
 
     args = vars(parser.parse_args())
     return args
@@ -50,13 +54,16 @@ if __name__ == "__main__":
 
     args = parsing()
 
-    tag = args['tag']
-    savepath = os.path.join(args["save_file"], args['simcase'])
+    filepath = os.path.join(args["save_file"], args['simcase'], "feedback")
+    savepath = os.path.join(args["save_plot"], args['simcase'], "feedback")
 
     # Directory check
     if not os.path.exists(savepath):
         os.makedirs(savepath)
 
+    if not os.path.exists(filepath):
+        os.makedirs(filepath)
+   
     if args['simcase'] == "two-stream":
         dist = TwoStream(v0 = args['vb'], sigma = args['vth'], n_samples=args['num_particle'], L = args['L'])
 
@@ -81,8 +88,10 @@ if __name__ == "__main__":
     
     # Actuator
     actuator = E_field(args['L'], args['num_mesh'], args['max_mode'])
-
     Nt = int(np.ceil((args['t_max'] - args['t_min']) / args['dt']))
+     
+    coeff_cos = []
+    coeff_sin = []
     
     # Trajectory of the system's state
     pos_list = []
@@ -90,19 +99,20 @@ if __name__ == "__main__":
     E_list = []
     PE_list = []
     
-    # Trajectory of the input control
-    coeff_cos = []
-    coeff_sin = []
-    
-    for idx_t in tqdm(range(Nt), "PIC simulation with E-field control"):
+    for idx_t in tqdm(range(Nt), "PIC simulation with feedback E-field control"):
         
-        # Update coefficients
-        actuator.update_E()
+        # Update actutor based on the state info
+        _, Eks = compute_E_k_spectrum(args['n0'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], sim.get_state(), False)
+        Eks = Eks[1:args['max_mode'] + 1,:]
+        
+        actuator.update_E((-1) * np.real(Eks), (+1) * np.imag(Eks))
+        
+        coeff_cos.append((-1) * np.real(Eks))
+        coeff_sin.append((+1) * np.imag(Eks))
         
         # Get action
-        # E_external = actuator.compute_E()
-        E_external = None
-
+        E_external = actuator.compute_E()
+        
         # Update motion
         sim.update_state(E_external)
     
@@ -113,9 +123,6 @@ if __name__ == "__main__":
         vel_list.append(sim.v.copy())
         E_list.append(E)
         PE_list.append(PE)
-        
-        coeff_cos.append(actuator.coeff_cos.copy())
-        coeff_sin.append(actuator.coeff_sin.copy())
         
     qs = np.concatenate(pos_list, axis = 1)
     ps = np.concatenate(vel_list, axis = 1)
@@ -148,4 +155,20 @@ if __name__ == "__main__":
     }
 
     # save data
-    savemat(file_name = os.path.join(savepath, "{}.mat".format(tag)), mdict=mdic, do_compression=True)
+    savemat(file_name = os.path.join(filepath, "data.mat"), mdict=mdic, do_compression=True)
+    
+    # plot electric field
+    # Electric energy over time
+    plot_log_E(args['t_max'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], snapshot, savepath, "log_E.pdf")
+    
+    # Fourier spectrum of electric field 
+    plot_E_k_spectrum(args['t_max'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], snapshot, savepath, "Ek_spectrum.pdf")
+    
+    # Fourier coefficient over time
+    plot_E_k_over_time(args['t_max'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], args['max_mode'], snapshot, savepath, "Ek_t.pdf")
+    
+    if args['simcase'] == "two-stream":
+        plot_two_stream_evolution(snapshot, savepath, "phase_space_evolution.pdf", 0, args['L'], -10.0, 10.0)
+
+    elif args['simcase'] == "bump-on-tail":
+        plot_bump_on_tail_evolution(snapshot, savepath, "phase_space_evolution.pdf", 0, args['L'], -10.0, 10.0)

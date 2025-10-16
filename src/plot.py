@@ -637,3 +637,49 @@ def plot_E_k_spectrum(
         plt.savefig(filepath, dpi=120)
 
     return fig, ax
+
+def plot_E_k_over_time(
+    tmax:float,
+    L:float,
+    dx:float,
+    N_mesh:float,
+    max_mode:int,
+    snapshot:np.ndarray,
+    save_dir:Optional[str],
+    filename:Optional[str],
+):
+    # check directory
+    if save_dir is not None:
+
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+
+        filepath = os.path.join(save_dir, filename)
+
+    else:
+        filepath = None
+
+    # Snapshot info
+    N = snapshot.shape[0] // 2
+    Nt = snapshot.shape[1]
+
+    ts = np.linspace(0, tmax, Nt)
+
+    ks_real, Ek_t_spectrum_real = compute_E_k_spectrum(1.0, L, dx, N_mesh, snapshot)
+    
+    fig, ax = plt.subplots(1, 1, figsize=(6, 3), facecolor="white", dpi=120)
+    
+    for i in range(1, max_mode + 1):
+        ax.plot(ts, Ek_t_spectrum_real[i,:].ravel(), label = r"$n={}$".format(i))
+    
+    ax.set_xlabel(r"$t$")
+    ax.set_ylabel(r"$E_k$")
+    ax.legend()
+    ax.grid(True)
+
+    fig.tight_layout()
+
+    if filepath is not None:
+        plt.savefig(filepath, dpi=120)
+
+    return fig, ax
