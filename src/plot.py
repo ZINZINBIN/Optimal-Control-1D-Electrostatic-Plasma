@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import os
-from typing import Optional
+from typing import Optional, Dict
 from scipy.stats import gaussian_kde
 from src.env.util import compute_E, generate_grad, generate_laplacian
 from src.interpret.spectrum import compute_E_k_spectrum
@@ -674,6 +674,86 @@ def plot_E_k_over_time(
     
     ax.set_xlabel(r"$t$")
     ax.set_ylabel(r"$E_k$")
+    ax.legend()
+    ax.grid(True)
+
+    fig.tight_layout()
+
+    if filepath is not None:
+        plt.savefig(filepath, dpi=120)
+
+    return fig, ax
+
+def plot_E_k_external_over_time(
+    tmax:float,
+    coeff_cos:np.ndarray,
+    coeff_sin:np.ndarray,
+    save_dir:Optional[str],
+    filename:Optional[str],
+):
+    # check directory
+    if save_dir is not None:
+
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+
+        filepath = os.path.join(save_dir, filename)
+
+    else:
+        filepath = None
+
+    # Snapshot info
+    max_mode = coeff_cos.shape[0]
+    Nt = coeff_cos.shape[1]
+    
+    coeff_abs = np.sqrt(coeff_cos ** 2 + coeff_sin ** 2)
+
+    ts = np.linspace(0, tmax, Nt)
+    
+    fig, ax = plt.subplots(1, 1, figsize=(6, 3), facecolor="white", dpi=120)
+    
+    for i in range(max_mode):
+        ax.plot(ts, coeff_abs[i,:].ravel(), label = r"$n={}$".format(i+1))
+    
+    ax.set_xlabel(r"$t$")
+    ax.set_ylabel(r"$E_k$")
+    ax.legend()
+    ax.grid(True)
+
+    fig.tight_layout()
+
+    if filepath is not None:
+        plt.savefig(filepath, dpi=120)
+
+    return fig, ax
+
+def plot_cost_over_time(
+    tmax:float,
+    Nt:int,
+    mdict:Dict,
+    save_dir:Optional[str],
+    filename:Optional[str],
+):
+    # check directory
+    if save_dir is not None:
+
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+
+        filepath = os.path.join(save_dir, filename)
+
+    else:
+        filepath = None
+
+    ts = np.linspace(0, tmax, Nt)    
+    fig, ax = plt.subplots(1, 1, figsize=(6, 3), facecolor="white", dpi=120)
+    
+    for key, value in mdict.items():
+        ax.plot(ts, value, label = r"{}".format(key))
+    
+    ax.set_xlabel(r"$t$")
+    ax.set_ylabel("Cost")
+    ax.set_yscale("log")
     ax.legend()
     ax.grid(True)
 

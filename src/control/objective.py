@@ -29,5 +29,5 @@ def estimate_electric_energy(state:np.ndarray, E_external:Optional[np.ndarray], 
         E_total = E_mesh
     
     PE = 0.5 * np.sum(E_total * E_total) * dx
-    PE *= N / L
+    # PE *= N / L
     return PE

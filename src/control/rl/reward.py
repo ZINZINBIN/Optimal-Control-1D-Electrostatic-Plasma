@@ -25,7 +25,7 @@ class Reward:
 
     def compute_kl_divergence(self, state:np.ndarray):
         f = estimate_f(state, self.N_mesh, self.L, self.vmin, self.vmax, self.n0)
-        kl = estimate_KL_divergence(f, self.feq)
+        kl = estimate_KL_divergence(f, self.feq, self.L / self.N_mesh, (self.vmax - self.vmin) / self.N_mesh)
         return kl
 
     def compute_electric_energy(self, state:np.ndarray):
@@ -46,14 +46,14 @@ class Reward:
         return np.tanh(1 - np.sqrt(self.compute_kl_divergence(state) / 25))
     
     def compute_reward_electric_energy(self, state:np.ndarray):
-        return np.tanh(1 - np.sqrt(self.compute_electric_energy(state) / 100.0))
+        return np.tanh(1 - np.sqrt(self.compute_electric_energy(state) / 10.0))
     
     def compute_reward_input_energy(self, action:np.ndarray):
-        return np.tanh(1 - np.sqrt(self.compute_input_energy(action) / 100.0))
+        return np.tanh(1 - np.sqrt(self.compute_input_energy(action) / 50.0))
     
     def compute_reward(self, state:np.ndarray, action:np.ndarray):
         r_kl = self.compute_reward_kl_divergence(state)
         r_pe = self.compute_reward_electric_energy(state)
         r_in = self.compute_reward_input_energy(action)
-        reward = r_kl + self.alpha * r_pe + self.beta * r_in
+        reward = self.alpha * r_pe + self.beta * r_in
         return reward

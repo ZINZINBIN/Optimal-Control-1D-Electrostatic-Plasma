@@ -4,11 +4,11 @@ import torch.nn.functional as F
 from tqdm.auto import tqdm
 from typing import Optional
 from torch.distributions import Normal
-import os, pickle
 import numpy as np
 from collections import namedtuple, deque
 from src.env.pic import PIC
 from src.control.rl.reward import Reward
+from src.control.rl.encode import Encoder
 from src.control.actuator import E_field
 
 # transition
@@ -54,9 +54,11 @@ class ActorCritic(nn.Module):
 
         self.x_norm = x_norm
         self.v_norm = v_norm
+        
+        self.encoder = Encoder(2, mlp_dim, mlp_dim, 5, 3, 1)
 
-        self.fc1 = nn.Linear(input_dim, mlp_dim)
-        self.norm1 = nn.LayerNorm(input_dim)
+        self.fc1 = nn.Linear(mlp_dim, mlp_dim)
+        self.norm1 = nn.LayerNorm(mlp_dim)
 
         self.fc2 = nn.Linear(mlp_dim, mlp_dim)
         self.norm2 = nn.LayerNorm(mlp_dim)
@@ -83,7 +85,9 @@ class ActorCritic(nn.Module):
         self.fc_v.weight.data.uniform_(*hidden_init(self.fc_v))
 
     def forward(self, x:torch.Tensor):
-        z = torch.cat([x.clone()[:,:self.input_dim//2] / self.x_norm, x.clone()[:,self.input_dim//2:] / self.v_norm], dim=1)
+        z = torch.stack([x.clone()[:,:self.input_dim//2] / self.x_norm, x.clone()[:,self.input_dim//2:] / self.v_norm], dim=1)
+        z = self.encoder(z).mean(dim = -1)
+        
         z = F.tanh(self.fc1(self.norm1(z)))
         z = F.tanh(self.fc2(self.norm2(z)))
         z = F.tanh(self.fc3(self.norm3(z)))

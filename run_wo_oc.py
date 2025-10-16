@@ -4,7 +4,16 @@ from scipy.io import savemat
 from tqdm.auto import tqdm
 from src.env.pic import PIC
 from src.env.dist import BumpOnTail, TwoStream
-from src.plot import plot_E_k_spectrum, plot_log_E, plot_E_k_over_time, plot_bump_on_tail_evolution, plot_two_stream_evolution
+from src.control.rl.reward import Reward
+from src.plot import (
+    plot_two_stream_evolution, 
+    plot_bump_on_tail_evolution, 
+    plot_log_E, 
+    plot_E_k_spectrum,
+    plot_E_k_over_time, 
+    plot_cost_over_time, 
+    plot_E_k_external_over_time
+)
 
 def parsing():
     parser = argparse.ArgumentParser(description="Vlasov-Poisson plasma kinetic simulation without E-field control")
@@ -86,6 +95,12 @@ if __name__ == "__main__":
     vel_list = []
     E_list = []
     PE_list = []
+    
+    # Compute the cost function
+    reward = Reward(sim.init_dist.get_init_state(), args['num_mesh'], args['L'], -25.0, 25.0, args['n0'], 1.0, 1.0)
+    
+    cost_kl_list = []
+    cost_ee_list = []
         
     for idx_t in tqdm(range(Nt), "PIC simulation without E-field control"):
         
@@ -102,6 +117,12 @@ if __name__ == "__main__":
         vel_list.append(sim.v.copy())
         E_list.append(E)
         PE_list.append(PE)
+        
+        cost_kl = reward.compute_kl_divergence(sim.get_state())
+        cost_ee = reward.compute_electric_energy(sim.get_state())
+        
+        cost_kl_list.append(cost_kl)
+        cost_ee_list.append(cost_ee)
         
     qs = np.concatenate(pos_list, axis = 1)
     ps = np.concatenate(vel_list, axis = 1)
@@ -130,6 +151,13 @@ if __name__ == "__main__":
 
     # save data
     savemat(file_name = os.path.join(filepath, "data.mat"), mdict=mdic, do_compression=True)
+    
+    # Plot cost function
+    cost = {
+        r"$J_{KL}$":cost_kl_list,
+        r"$J_{ee}$":cost_ee_list,
+    }
+    plot_cost_over_time(args['t_max'], Nt, cost, savepath, "cost.pdf")
     
     # plot electric field
     # Electric energy over time

@@ -6,7 +6,16 @@ from src.env.pic import PIC
 from src.env.dist import BumpOnTail, TwoStream
 from src.control.actuator import E_field
 from src.control.rl.ppo import ActorCritic, train, ReplayBuffer
-from src.plot import plot_two_stream_evolution, plot_bump_on_tail_evolution, plot_log_E, plot_E_k_spectrum, plot_E_k_over_time
+from src.control.rl.reward import Reward
+from src.plot import (
+    plot_two_stream_evolution, 
+    plot_bump_on_tail_evolution, 
+    plot_log_E, 
+    plot_E_k_spectrum,
+    plot_E_k_over_time, 
+    plot_cost_over_time, 
+    plot_E_k_external_over_time
+)
 
 def parsing():
     parser = argparse.ArgumentParser(description="Optimization of RL for optimal control in Vlasov-Poisson plasma kinetic system")
@@ -62,7 +71,7 @@ def parsing():
 
     # Cost parameters
     parser.add_argument("--alpha", type=float, default=1.0)
-    parser.add_argument("--beta", type=float, default=0.1)
+    parser.add_argument("--beta", type=float, default=0.5)
     parser.add_argument("--save_last", type=str, default="ppo_last.pt")
     parser.add_argument("--save_best", type=str, default="ppo_best.pt")
     
@@ -202,6 +211,13 @@ if __name__ == "__main__":
     
     # no gradient
     network.eval()
+    
+    # Compute the cost function
+    reward = Reward(sim.init_dist.get_init_state(), args['num_mesh'], args['L'], -25.0, 25.0, args['n0'], 1.0, 1.0)
+    
+    cost_kl_list = []
+    cost_ee_list = []
+    cost_ie_list = []
 
     for idx_t in tqdm(range(Nt), "PIC simulation with E-field control"):
         
@@ -227,6 +243,15 @@ if __name__ == "__main__":
         
         # Update motion
         sim.update_state(E_external)
+        
+        # Compute code
+        cost_kl = reward.compute_kl_divergence(sim.get_state())
+        cost_ee = reward.compute_electric_energy(sim.get_state())
+        cost_ie = reward.compute_input_energy(coeffs)
+        
+        cost_kl_list.append(cost_kl)
+        cost_ee_list.append(cost_ee)
+        cost_ie_list.append(cost_ie)
 
     qs = np.concatenate(pos_list, axis = 1)
     ps = np.concatenate(vel_list, axis = 1)
@@ -261,6 +286,15 @@ if __name__ == "__main__":
     # save data
     savemat(file_name = os.path.join(filepath, "data.mat"), mdict=mdic, do_compression=True)
     
+    # Plot cost function
+    cost = {
+        r"$J_{KL}$":cost_kl_list,
+        r"$J_{ee}$":cost_ee_list,
+        r"$J_{ie}$":cost_ie_list
+    }
+    
+    plot_cost_over_time(args['t_max'], Nt, cost, savepath, "cost.pdf")
+    
     # Plot the result
     if args['simcase'] == "two-stream":
         plot_two_stream_evolution(snapshot, savepath, "phase_space_evolution.pdf", 0, args['L'], -10.0, 10.0)
@@ -276,3 +310,6 @@ if __name__ == "__main__":
     
     # Fourier coefficient over time
     plot_E_k_over_time(args['t_max'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], args['max_mode'], snapshot, savepath, "Ek_t.pdf")
+
+    # Amplitude of each external E field over time
+    plot_E_k_external_over_time(args['t_max'], coeff_cos, coeff_sin, savepath, "Ek_t_external.pdf")
