@@ -70,7 +70,6 @@ def parsing():
 
     # Cost parameters
     parser.add_argument("--alpha", type=float, default=1.0)
-    parser.add_argument("--beta", type=float, default=0.1)
     parser.add_argument("--save_last", type=str, default="sac_last.pt")
     parser.add_argument("--save_best", type=str, default="sac_best.pt")
     
@@ -195,8 +194,7 @@ if __name__ == "__main__":
             args['verbose'],
             os.path.join(filepath, args['save_last']),
             os.path.join(filepath, args['save_best']),
-            args['alpha'],
-            args['beta']
+            args['alpha']
         )
         
         # save optimization process
@@ -229,7 +227,7 @@ if __name__ == "__main__":
     p_network.eval()
     
     # Compute the cost function
-    reward = Reward(sim.init_dist.get_init_state(), args['num_mesh'], args['L'], -25.0, 25.0, args['n0'], 1.0, 1.0)
+    reward = Reward(sim.init_dist.get_init_state(), args['num_mesh'], args['L'], -25.0, 25.0, args['n0'], 1.0)
     
     cost_kl_list = []
     cost_ee_list = []

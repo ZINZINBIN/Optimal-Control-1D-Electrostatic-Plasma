@@ -11,6 +11,8 @@ from src.control.rl.reward import Reward
 from src.control.rl.encode import Encoder
 from src.control.actuator import E_field
 
+torch.backends.cudnn.benchmark = True
+
 # transition
 Transition = namedtuple(
     'Transition',
@@ -164,9 +166,10 @@ def update_policy(
         discounted_reward = reward + (gamma * discounted_reward)
         rewards.insert(0, discounted_reward)
         
-    # Normalizing the rewards
     reward_batch = torch.cat(rewards).float().to(device)
-    reward_batch = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-6)
+    
+    # Normalizing the rewards
+    # reward_batch = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-6)
     
     loss_list = []
     
@@ -216,7 +219,6 @@ def train(
     save_last : Optional[str] = None,
     save_best : Optional[str] = None,
     alpha:float = 0.1,
-    beta:float = 0.1,
     k_epoch:int = 4,
     ):
 
@@ -224,7 +226,7 @@ def train(
         device = "cpu"
 
     # Reward class
-    reward_cls = Reward(env.init_dist.get_init_state(), env.N_mesh, env.L, -25.0, 25.0, env.n0, alpha, beta)
+    reward_cls = Reward(env.init_dist.get_init_state(), env.N_mesh, env.L, -25.0, 25.0, env.n0, alpha)
     
     # Trajectory
     loss_traj = []
@@ -265,7 +267,7 @@ def train(
             next_state_tensor = torch.from_numpy(next_state).unsqueeze(0).float() 
 
             # compute cost
-            reward = reward_cls.compute_reward(state, action)           
+            reward = reward_cls.compute_reward(state, actuator.compute_E())
             reward_tensor = torch.tensor([reward]).float()
 
             # save trajectory into memory
