@@ -60,10 +60,10 @@ def parsing():
     parser.add_argument("--mlp_dim", type = int, default = 32)
     parser.add_argument("--r", type =float, default = 0.995)
     parser.add_argument("--std", type = float, default = 0.5)
-    parser.add_argument("--capacity", type=int, default=10)
+    parser.add_argument("--capacity", type=int, default= 5)
     parser.add_argument("--eps_clip", type=float, default=0.25)
     parser.add_argument("--entropy_coeff", type=float, default=0.10)
-    parser.add_argument("--value_coeff", type=float, default=0.25)
+    parser.add_argument("--value_coeff", type=float, default=0.20)
     parser.add_argument("--num_episode", type=int, default=1000)
     parser.add_argument("--verbose", type=int, default=10)
     parser.add_argument("--lr", type=float, default=5e-4)
@@ -215,17 +215,28 @@ if __name__ == "__main__":
     
     cost_kl_list = []
     cost_ee_list = []
-
-    for idx_t in tqdm(range(Nt), "PIC simulation with E-field control"):
-        
-        # Update coefficients
-        state = sim.get_state()
+    
+    def compute_input_E_field(state:np.ndarray):
         coeffs = network.get_action(state)
         actuator.update_E(coeffs[:args['max_mode']], coeffs[args['max_mode']:])
-
-        # Get action
         E_external = actuator.compute_E()
+        return E_external
+        
+    for idx_t in tqdm(range(Nt), "PIC simulation with E-field control"):
+        
+        # # Update coefficients
+        # state = sim.get_state()
+        # coeffs = network.get_action(state)
+        # actuator.update_E(coeffs[:args['max_mode']], coeffs[args['max_mode']:])
 
+        # # Get action
+        # E_external = actuator.compute_E()
+        
+        # # Update motion
+        # sim.update_state(E_external)
+        
+        sim.update_state_w_input_func(compute_input_E_field)
+        
         # save current state
         E = sim.get_energy()
         PE = sim.get_electric_energy()
@@ -238,12 +249,9 @@ if __name__ == "__main__":
         coeff_cos.append(actuator.coeff_cos.copy())
         coeff_sin.append(actuator.coeff_sin.copy())
         
-        # Update motion
-        sim.update_state(E_external)
-        
         # Compute code
         cost_kl = reward.compute_kl_divergence(sim.get_state())
-        cost_ee = reward.compute_electric_energy(sim.get_state(), E_external)
+        cost_ee = reward.compute_electric_energy(sim.get_state(), actuator.compute_E())
         
         cost_kl_list.append(cost_kl)
         cost_ee_list.append(cost_ee)

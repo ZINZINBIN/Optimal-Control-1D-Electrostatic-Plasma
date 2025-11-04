@@ -1,7 +1,7 @@
 import numpy as np
 import scipy as sp
 from tqdm.auto import tqdm
-from typing import Literal, Optional, Union, List
+from typing import Literal, Optional, Union, List, Callable
 from src.env.util import generate_grad, generate_laplacian
 from src.env.integration import symplectic_4th_order
 from src.env.solve import Gaussian_Elimination_Periodic
@@ -123,7 +123,6 @@ class PIC:
             self.E = self.weight_l * self.E_mesh[self.indx_l[:, 0]] + self.weight_m * self.E_mesh[self.indx_m[:,0]] + self.weight_r * self.E_mesh[self.indx_r[:, 0]]
 
     def compute_state_gradient(self, eta:np.ndarray, E_external:Optional[np.ndarray]):
-
         xdot = eta[self.N:,:]
         vdot = (-1) * compute_E(eta, self.dx, self.N_mesh, self.n0, self.L, self.N, self.grad, self.laplacian, False, self.interpol, E_external)[0]
         grad_eta = np.concatenate([xdot, vdot], axis = 0)
@@ -145,7 +144,24 @@ class PIC:
 
         self.update_density()
         self.update_E_field()
-    
+        
+    def update_state_w_input_func(self, input_func: Optional[Callable]):
+        eta = np.concatenate([self.x.reshape(-1, 1), self.v.reshape(-1, 1)], axis=0)
+        eta_f = symplectic_4th_order(eta, lambda x : self.compute_state_gradient(x, input_func(x)), self.dt)
+
+        x = eta_f[:self.N]
+        v = eta_f[self.N:]
+
+        # Periodicity check
+        x = np.mod(x, self.L)
+
+        # Update information
+        self.x = x
+        self.v = v
+
+        self.update_density()
+        self.update_E_field()
+        
     def get_state(self):
         state = np.concatenate([self.x.copy().reshape(-1,1), self.v.copy().reshape(-1,1)], axis = 0)
         return state

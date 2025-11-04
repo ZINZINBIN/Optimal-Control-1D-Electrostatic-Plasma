@@ -103,12 +103,9 @@ if __name__ == "__main__":
     cost_ee_list = []
         
     for idx_t in tqdm(range(Nt), "PIC simulation without E-field control"):
-        
-        # Get action
-        E_external = None
 
         # Update motion
-        sim.update_state(E_external)
+        sim.update_state(None)
     
         E = sim.get_energy()
         PE = sim.get_electric_energy()

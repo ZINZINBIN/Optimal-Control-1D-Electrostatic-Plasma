@@ -169,7 +169,7 @@ def update_policy(
     reward_batch = torch.cat(rewards).float().to(device)
     
     # Normalizing the rewards
-    # reward_batch = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-6)
+    reward_batch = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-6)
     
     loss_list = []
     
@@ -190,8 +190,8 @@ def update_policy(
         loss = loss.mean()
         loss.backward()
         
-        for param in policy_network.parameters():
-            param.grad.data.clamp_(-1.0, 1.0)
+        # Gradient clipping
+        torch.nn.utils.clip_grad_norm_(policy_network.parameters(), max_norm=1.0)
             
         policy_optimizer.step()
         

@@ -98,7 +98,15 @@ if __name__ == "__main__":
     # Actuator
     actuator = E_field(args['L'], args['num_mesh'], args['max_mode'])
     Nt = int(np.ceil((args['t_max'] - args['t_min']) / args['dt']))
-     
+    
+    def compute_input_E_field(u:np.ndarray):
+        _, Eks = compute_E_k_spectrum(args['n0'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], u, False)
+        Eks = Eks[1:args['max_mode'] + 1,:]
+
+        actuator.update_E((-1) * np.real(Eks), (+1) * np.imag(Eks))
+        E_external = actuator.compute_E()
+        return E_external
+        
     coeff_cos = []
     coeff_sin = []
     
@@ -109,28 +117,18 @@ if __name__ == "__main__":
     PE_list = []
     
     # Compute the cost function
-    reward = Reward(sim.init_dist.get_init_state(), args['num_mesh'], args['L'], -25.0, 25.0, args['n0'], 1.0, 1.0)
+    reward = Reward(sim.init_dist.get_init_state(), args['num_mesh'], args['L'], -25.0, 25.0, args['n0'], 1.0)
     
     cost_kl_list = []
     cost_ee_list = []
-    cost_ie_list = []
     
     for idx_t in tqdm(range(Nt), "PIC simulation with feedback E-field control"):
         
-        # Update actutor based on the state info
-        _, Eks = compute_E_k_spectrum(args['n0'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], sim.get_state(), False)
-        Eks = Eks[1:args['max_mode'] + 1,:]
+        # Method 02. Use state-dependent E field over each time-step: dx/dt = f(x(t),E_ext(x(t)))) at t in (t_n, t_n+1)
+        sim.update_state_w_input_func(compute_input_E_field)
         
-        actuator.update_E((-1) * np.real(Eks), (+1) * np.imag(Eks))
-        
-        coeff_cos.append((-1) * np.real(Eks))
-        coeff_sin.append((+1) * np.imag(Eks))
-        
-        # Get action
-        E_external = actuator.compute_E()
-        
-        # Update motion
-        sim.update_state(E_external)
+        coeff_cos.append(actuator.coeff_cos.reshape(-1,1))
+        coeff_sin.append(actuator.coeff_sin.reshape(-1,1))
     
         E = sim.get_energy()
         PE = sim.get_electric_energy()
@@ -141,12 +139,10 @@ if __name__ == "__main__":
         PE_list.append(PE)
         
         cost_kl = reward.compute_kl_divergence(sim.get_state())
-        cost_ee = reward.compute_electric_energy(sim.get_state())
-        cost_ie = reward.compute_input_energy(np.concatenate([(-1) * np.real(Eks), (+1) * np.imag(Eks)]))
+        cost_ee = reward.compute_electric_energy(sim.get_state(), actuator.compute_E())
         
         cost_kl_list.append(cost_kl)
         cost_ee_list.append(cost_ee)
-        cost_ie_list.append(cost_ie)
         
     qs = np.concatenate(pos_list, axis = 1)
     ps = np.concatenate(vel_list, axis = 1)
@@ -185,7 +181,6 @@ if __name__ == "__main__":
     cost = {
         r"$J_{KL}$":cost_kl_list,
         r"$J_{ee}$":cost_ee_list,
-        r"$J_{ie}$":cost_ie_list
     }
     
     plot_cost_over_time(args['t_max'], Nt, cost, savepath, "cost.pdf")

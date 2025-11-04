@@ -226,7 +226,7 @@ def update_policy(
     reward_batch = torch.cat(batch.reward).float().to(device)
     
     # Normalizing the rewards
-    # reward_batch = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-6)
+    reward_batch = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-6)
         
     alpha = log_alpha.exp()
    
