@@ -12,6 +12,8 @@ from src.plot import (
     plot_E_k_spectrum,
     plot_E_k_over_time, 
     plot_cost_over_time, 
+    plot_x_dist_evolution,
+    plot_v_dist_evolution,
     plot_E_k_external_over_time
 )
 
@@ -87,26 +89,26 @@ if __name__ == "__main__":
         interpol=args["interpol"],
         init_dist=dist,
     )
-    
+
     Nt = int(np.ceil((args['t_max'] - args['t_min']) / args['dt']))
-    
+
     # Trajectory of the system's state
     pos_list = []
     vel_list = []
     E_list = []
     PE_list = []
-    
+
     # Compute the cost function
-    reward = Reward(sim.init_dist.get_init_state(), args['num_mesh'], args['L'], -25.0, 25.0, args['n0'], 1.0, 1.0)
-    
+    reward = Reward(sim.init_dist.get_init_state(), args['num_mesh'], args['L'], -25.0, 25.0, args['n0'], 1.0)
+
     cost_kl_list = []
     cost_ee_list = []
-        
+
     for idx_t in tqdm(range(Nt), "PIC simulation without E-field control"):
 
         # Update motion
         sim.update_state(None)
-    
+
         E = sim.get_energy()
         PE = sim.get_electric_energy()
 
@@ -114,20 +116,20 @@ if __name__ == "__main__":
         vel_list.append(sim.v.copy())
         E_list.append(E)
         PE_list.append(PE)
-        
+
         cost_kl = reward.compute_kl_divergence(sim.get_state())
         cost_ee = reward.compute_electric_energy(sim.get_state())
-        
+
         cost_kl_list.append(cost_kl)
         cost_ee_list.append(cost_ee)
-        
+
     qs = np.concatenate(pos_list, axis = 1)
     ps = np.concatenate(vel_list, axis = 1)
     snapshot = np.concatenate([qs, ps], axis=0)
 
     E = np.array(E_list)
     PE = np.array(PE_list)
-    
+
     mdic = {
         "snapshot": snapshot,
         "E":E,
@@ -148,24 +150,31 @@ if __name__ == "__main__":
 
     # save data
     savemat(file_name = os.path.join(filepath, "data.mat"), mdict=mdic, do_compression=True)
-    
+
     # Plot cost function
     cost = {
         r"$J_{KL}$":cost_kl_list,
         r"$J_{ee}$":cost_ee_list,
     }
     plot_cost_over_time(args['t_max'], Nt, cost, savepath, "cost.pdf")
-    
+
     # plot electric field
     # Electric energy over time
     plot_log_E(args['t_max'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], snapshot, savepath, "log_E.pdf")
-    
-    # Fourier spectrum of electric field 
+
+    # Fourier spectrum of electric field
     plot_E_k_spectrum(args['t_max'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], snapshot, savepath, "Ek_spectrum.pdf")
-    
+
     # Fourier coefficient over time
     plot_E_k_over_time(args['t_max'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], 5, snapshot, savepath, "Ek_t.pdf")
+
+    # Distribution in a phase-space
+    # f(x)
+    plot_x_dist_evolution(snapshot, savepath, "x_dist.pdf", 0, args['L'], args['num_mesh'])
     
+    # f(v)
+    plot_v_dist_evolution(snapshot, savepath, "v_dist.pdf", -15.0, 15.0, args['num_mesh'])
+
     if args['simcase'] == "two-stream":
         plot_two_stream_evolution(snapshot, savepath, "phase_space_evolution.pdf", 0, args['L'], -10.0, 10.0)
 

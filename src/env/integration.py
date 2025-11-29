@@ -56,20 +56,22 @@ def verlet(eta: np.ndarray, grad_func: Callable, dt: float):
     eta = _symplectic_forward_step(eta, grad_func, dt, 0.0, 0.5)
     return eta
 
-# Ruth's 4th order symplectic integration
+# Yoshida 4th order symplectic integration (separable Hamiltonian only)
 def symplectic_4th_order(eta: np.ndarray, grad_func: Callable, dt: float):
-    
-    phi = 2 ** (1 / 3)
-    c1 = c4 = 1 / (2 * (2 - phi))
-    c2 = c3 = (1 - phi) / (2 * (2 - phi))
-    d1 = d3 = 1 / (2 - phi)
-    d2 = (-1) * phi / (2 - phi)
-    d4 = 0
 
-    eta = _symplectic_forward_step(eta, grad_func, dt, c1, d1)
-    eta = _symplectic_forward_step(eta, grad_func, dt, c2, d2)
-    eta = _symplectic_forward_step(eta, grad_func, dt, c3, d3)
-    eta = _symplectic_forward_step(eta, grad_func, dt, c4, d4)
+    phi = 2 ** (1 / 3)
+    w0 = (-1) * phi / (2 - phi)
+    w1 = 1 / (2 - phi)
+
+    c1 = c4 = 0.5 * w1
+    c2 = c3 = 0.5 * (w0 + w1)
+    d1 = d3 = w1
+    d2 = w0
+
+    eta = _symplectic_forward_step(eta, grad_func, dt, c1, 0)
+    eta = _symplectic_forward_step(eta, grad_func, dt, c2, d1)
+    eta = _symplectic_forward_step(eta, grad_func, dt, c3, d2)
+    eta = _symplectic_forward_step(eta, grad_func, dt, c4, d3)
     return eta
 
 # Symplectic integration: Implicit 2nd order method

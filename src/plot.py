@@ -26,7 +26,7 @@ def plot_x_dist_snapshot(
     else:
         filepath = None
 
-    fig, ax = plt.subplots(1, 1, figsize=(5, 4), facecolor="white", dpi=120)
+    fig, ax = plt.subplots(1, 1, figsize=(6, 4), facecolor="white", dpi=120)
 
     # snapshot info
     N = snapshot.shape[0] // 2
@@ -68,7 +68,7 @@ def plot_v_dist_snapshot(
     else:
         filepath = None
 
-    fig, ax = plt.subplots(1, 1, figsize=(5, 4), facecolor="white", dpi=120)
+    fig, ax = plt.subplots(1, 1, figsize=(6, 4), facecolor="white", dpi=120)
 
     # snapshot info
     N = snapshot.shape[0] // 2
@@ -241,7 +241,7 @@ def plot_x_dist_evolution(
     else:
         filepath = None
 
-    fig, axes = plt.subplots(1, 3, figsize=(10, 3), facecolor="white", dpi=120, sharey=True)
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4), facecolor="white", dpi=120, sharey=True)
     axes = axes.ravel()
 
     # snapshot info
@@ -382,7 +382,7 @@ def plot_dist_evolution(
     # Scope
     extent = [xmin, xmax, vmin, vmax]
 
-    fig, axes = plt.subplots(1, 3, figsize=(15, 3), facecolor="white", dpi=120, constrained_layout=True)
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4), facecolor="white", dpi=120, constrained_layout=True)
     axes = axes.ravel()
 
     axes[0].cla()
@@ -440,7 +440,7 @@ def plot_two_stream_evolution(
     Nh = N // 2
     Nt = snapshot.shape[1]
 
-    fig, axes = plt.subplots(1, 3, figsize=(12, 3), facecolor="white", dpi=120)
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4), facecolor="white", dpi=120)
 
     axes = axes.ravel()
     
@@ -503,7 +503,7 @@ def plot_bump_on_tail_evolution(
     else:
         low_electron_indice = np.arange(0,N)
 
-    fig, axes = plt.subplots(1, 3, figsize=(12, 3), facecolor="white", dpi=120)
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4), facecolor="white", dpi=120)
     
     axes = axes.ravel()
     
