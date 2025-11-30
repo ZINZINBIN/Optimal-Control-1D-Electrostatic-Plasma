@@ -5,7 +5,7 @@ from scipy.io import savemat
 from src.env.pic import PIC
 from src.env.dist import BumpOnTail, TwoStream
 from src.control.actuator import E_field
-from src.control.rl.ddpg import Actor,Critic, train, ReplayBuffer
+from src.control.rl.ddpg import Actor, Critic, train, ReplayBuffer
 from src.control.rl.reward import Reward
 from src.plot import (
     plot_two_stream_evolution, 
@@ -28,8 +28,8 @@ def parsing():
     parser.add_argument("--save_file", type=str, default="./dataset/")
 
     # PIC parameters (default)
-    parser.add_argument("--num_particle", type = int, default = 10000)  
-    parser.add_argument("--num_mesh", type = int, default = 500)        
+    parser.add_argument("--num_particle", type = int, default = 5000)  
+    parser.add_argument("--num_mesh", type = int, default = 250)        
     parser.add_argument("--t_min", type = float, default = 0)
     parser.add_argument("--t_max", type = float, default = 50)
     parser.add_argument("--dt", type = float, default = 0.05)          
@@ -46,23 +46,23 @@ def parsing():
 
     # Initial perturbation parameters (both cases)
     parser.add_argument("--A", type = float, default = 0.1)
-    parser.add_argument("--n_mode", type = int, default = 3)
+    parser.add_argument("--n_mode", type = int, default = 2)
 
     # Distribution parameters (Bump-on-tail)
     parser.add_argument("--a", type = float, default = 0.2)   
 
     # Controller
-    parser.add_argument("--max_mode", type = int, default = 5)
+    parser.add_argument("--max_mode", type = int, default = 4)
     parser.add_argument("--coeff_max", type=float, default= 1.0)
     parser.add_argument("--coeff_min", type=float, default= -1.0)
 
     # Network
     parser.add_argument("--mlp_dim", type=int, default=32)
     parser.add_argument("--r", type=float, default=0.995)
-    parser.add_argument("--tau", type=float, default=0.5)
-    parser.add_argument("--capacity", type=int, default=256)
-    parser.add_argument("--batch_size", type=int, default=128)
-    parser.add_argument("--num_episode", type=int, default=1000)
+    parser.add_argument("--tau", type=float, default=0.1)
+    parser.add_argument("--capacity", type=int, default=1e5)
+    parser.add_argument("--batch_size", type=int, default=512)
+    parser.add_argument("--num_episode", type=int, default=200)
     parser.add_argument("--verbose", type=int, default=10)
     parser.add_argument("--lr", type=float, default=5e-4)
     parser.add_argument("--noise_scale", type=float, default=0.1)
@@ -146,8 +146,8 @@ if __name__ == "__main__":
     input_dim = args['num_particle'] * 2
     n_actions = 2 * args['max_mode']
 
-    p_network = Actor(input_dim, args["mlp_dim"], n_actions, output_min = args['coeff_min'], output_max = args['coeff_max'])
     q_network = Critic(input_dim, args["mlp_dim"], n_actions)
+    p_network = Actor(input_dim, args["mlp_dim"], n_actions, output_min = args['coeff_min'], output_max = args['coeff_max'])
     target_q_network = Critic(input_dim, args["mlp_dim"], n_actions)
     target_p_network = Actor(input_dim, args["mlp_dim"], n_actions, output_min = args['coeff_min'], output_max = args['coeff_max'])
 
@@ -156,8 +156,8 @@ if __name__ == "__main__":
     target_q_network.to(device)
     target_p_network.to(device)
 
-    q_optimizer = torch.optim.Adam(q_network.parameters(), lr = args['lr'])
-    p_optimizer = torch.optim.Adam(p_network.parameters(), lr=args["lr"])
+    q_optimizer = torch.optim.RMSprop(q_network.parameters(), lr=args['lr'])
+    p_optimizer = torch.optim.RMSprop(p_network.parameters(), lr=args["lr"])
 
     # maximum simulation time (integer)
     Nt = int(np.ceil((args['t_max'] - args['t_min']) / args['dt']))
@@ -228,7 +228,7 @@ if __name__ == "__main__":
     cost_ee_list = []
 
     def compute_input_E_field(state:np.ndarray):
-        coeffs = p_network.get_action(state)
+        coeffs = p_network.get_action(state, "cpu")
         actuator.update_E(coeffs[:args['max_mode']], coeffs[args['max_mode']:])
         E_external = actuator.compute_E()
         return E_external
@@ -237,7 +237,7 @@ if __name__ == "__main__":
 
         # Update coefficients
         state = sim.get_state()
-        coeffs = p_network.get_action(state)
+        coeffs = p_network.get_action(state, "cpu")
         actuator.update_E(coeffs[:args['max_mode']], coeffs[args['max_mode']:])
 
         # Get action
@@ -263,7 +263,7 @@ if __name__ == "__main__":
 
         # Compute code
         cost_kl = reward.compute_kl_divergence(sim.get_state())
-        cost_ee = reward.compute_electric_energy(sim.get_state(), actuator.compute_E())
+        cost_ee = reward.compute_electric_energy(sim.get_state(), None)
 
         cost_kl_list.append(cost_kl)
         cost_ee_list.append(cost_ee)

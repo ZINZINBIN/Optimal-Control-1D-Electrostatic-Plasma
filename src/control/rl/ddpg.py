@@ -15,7 +15,7 @@ torch.backends.cudnn.benchmark = True
 # transition
 Transition = namedtuple(
     'Transition',
-    ('state','action','next_state','reward','done','prob_a')
+    ('state','action','next_state','reward','done')
 )
 
 class ReplayBuffer(object):
@@ -40,7 +40,7 @@ class ReplayBuffer(object):
 
 # Function for initialization
 def hidden_init(layer: torch.nn.Linear):
-    fan_in = layer.weight.data.size()[0]
+    fan_in = layer.weight.data.size()[1]
     lim = 1.0 / np.sqrt(fan_in)
     return (-lim, lim)
 
@@ -98,9 +98,11 @@ class Actor(nn.Module):
         self.fc_out.weight.data.uniform_(*hidden_init(self.fc_out))
 
     def forward(self, x:torch.Tensor)->torch.Tensor:
-
-        z = torch.cat([x.clone()[:,:self.input_dim//2] / self.x_norm, x.clone()[:,self.input_dim//2:] / self.v_norm], dim=1)
-
+    
+        x_pos = x[:,:self.input_dim//2] / self.x_norm
+        x_vel = x[:,self.input_dim//2:] / self.v_norm
+        
+        z = torch.cat([x_pos, x_vel], dim=1)
         z = F.tanh(self.fc1(self.norm1(z)))
         z = F.tanh(self.fc2(self.norm2(z)))
         z = F.tanh(self.fc3(self.norm3(z)))
@@ -144,7 +146,7 @@ class Critic(nn.Module):
         self.v_norm = v_norm
 
         self.fc1 = nn.Linear(input_dim + n_actions, mlp_dim)
-        self.norm1 = nn.LayerNorm(input_dim)
+        self.norm1 = nn.LayerNorm(input_dim + n_actions)
 
         self.fc2 = nn.Linear(mlp_dim, mlp_dim)
         self.norm2 = nn.LayerNorm(mlp_dim)
@@ -165,9 +167,11 @@ class Critic(nn.Module):
         self.fc_out.weight.data.uniform_(*hidden_init(self.fc_out))
 
     def forward(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
-
-        z = torch.cat([x.clone()[:,:self.input_dim//2] / self.x_norm, x.clone()[:,self.input_dim//2:] / self.v_norm], dim=1)
-        z = torch.cat([z, a], dim=1)
+        # Normalize
+        x_pos = x[:,:self.input_dim//2] / self.x_norm
+        x_vel = x[:,self.input_dim//2:] / self.v_norm
+        
+        z = torch.cat([x_pos, x_vel, a], dim=1)
         z = F.tanh(self.fc1(self.norm1(z)))
         z = F.tanh(self.fc2(self.norm2(z)))
         z = F.tanh(self.fc3(self.norm3(z)))
@@ -233,7 +237,7 @@ def update_policy(
     # Parsing state, action, reward, done, and next state
     state_batch = torch.cat(batch.state).float().to(device)
     action_batch = torch.cat(batch.action).float().to(device)
-    reward_batch = torch.cat(batch.reward).float().to(device)
+    reward_batch = torch.cat(batch.reward).float().to(device)   
 
     non_final_next_states = torch.cat([s for s in batch.next_state if s is not None]).to(device)
     non_final_mask = torch.tensor(tuple(map(lambda s : s is not None, batch.next_state)), device = device, dtype = torch.bool)
@@ -311,7 +315,7 @@ def train(
     best_reward = None
 
     # Ornstein-Uhlenbeck noise
-    ou_noise = OrnsteinUhlenbeckNoise(q_network.n_actions)
+    ou_noise = OrnsteinUhlenbeckNoise(p_network.n_actions)
 
     for i_episode in tqdm(range(num_episode), desc = '# Training DDPG controller...'):
 
@@ -351,7 +355,7 @@ def train(
             next_state_tensor = torch.from_numpy(next_state).unsqueeze(0).float() 
 
             # compute cost
-            reward = reward_cls.compute_reward(state, actuator.compute_E())           
+            reward = reward_cls.compute_reward(state, None)           
             reward_tensor = torch.tensor([reward])
 
             # save trajectory into memory
@@ -359,7 +363,7 @@ def train(
             memory.push(state_tensor, action_tensor, next_state_tensor, reward_tensor, done)
 
             # update policy
-            if memory.__len__() >= batch_size:
+            if memory.__len__() >= batch_size and idx_t % (batch_size // 8) == 0:
 
                 q_loss, p_loss = update_policy(
                     memory,
@@ -405,7 +409,7 @@ def train(
             best_reward = reward_mean
             torch.save(p_network.state_dict(), save_best)
 
-    print("# Training SAC controller process complete")
+    print("# Training DDPG controller process complete")
 
     reward = np.array(reward_traj)
     q_loss = np.array(q_loss_traj)

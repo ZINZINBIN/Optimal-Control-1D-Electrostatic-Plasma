@@ -28,8 +28,8 @@ def parsing():
     parser.add_argument("--save_plot", type=str, default="./result/")
 
     # PIC parameters (default)
-    parser.add_argument("--num_particle", type = int, default = 10000)  
-    parser.add_argument("--num_mesh", type = int, default = 500)        
+    parser.add_argument("--num_particle", type = int, default = 5000)  
+    parser.add_argument("--num_mesh", type = int, default = 250)        
     parser.add_argument("--t_min", type = float, default = 0)
     parser.add_argument("--t_max", type = float, default = 50)
     parser.add_argument("--dt", type = float, default = 0.05)          
@@ -46,7 +46,7 @@ def parsing():
 
     # Initial perturbation parameters (both cases)
     parser.add_argument("--A", type = float, default = 0.1)
-    parser.add_argument("--n_mode", type = int, default = 3)
+    parser.add_argument("--n_mode", type = int, default = 2)
 
     # Distribution parameters (Bump-on-tail)
     parser.add_argument("--a", type = float, default = 0.2)   
