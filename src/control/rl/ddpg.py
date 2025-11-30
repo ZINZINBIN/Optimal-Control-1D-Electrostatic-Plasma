@@ -301,6 +301,9 @@ def train(
     noise_scale: float = 0.1,
 ):
 
+    # minimum buffer size to start training
+    min_buffer_size = 1024
+
     if device is None:
         device = "cpu"
 
@@ -345,7 +348,7 @@ def train(
             action = np.clip(action + noise, p_network.output_min, p_network.output_max)
 
             # update actuator
-            actuator.update_E(coeff_cos = action[:p_network.n_actions//2], coeff_sin = action[p_network.n_actions//2:])
+            actuator.update_E(coeff_cos = None, coeff_sin = action)
 
             # update state
             env.update_state(E_external=actuator.compute_E())
@@ -363,7 +366,7 @@ def train(
             memory.push(state_tensor, action_tensor, next_state_tensor, reward_tensor, done)
 
             # update policy
-            if memory.__len__() >= batch_size and idx_t % (batch_size // 8) == 0:
+            if memory.__len__() >= min_buffer_size and idx_t % 4 == 0:
 
                 q_loss, p_loss = update_policy(
                     memory,

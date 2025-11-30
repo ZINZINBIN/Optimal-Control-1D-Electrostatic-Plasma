@@ -13,8 +13,8 @@ class E_field:
         self.xm = np.linspace(0, L, N_mesh)
 
         # Coefficient (all components in [-1,1] initially)
-        self.coeff_cos = (np.random.rand(max_mode) * 2 - 1.0).reshape(-1,1)
-        self.coeff_sin = (np.random.rand(max_mode) * 2 - 1.0).reshape(-1,1)
+        self.coeff_cos = np.zeros((max_mode, 1))
+        self.coeff_sin = np.zeros((max_mode, 1))
 
         # wave number
         self.k = np.array([2 * np.pi / L * n for n in range(1, max_mode + 1)])

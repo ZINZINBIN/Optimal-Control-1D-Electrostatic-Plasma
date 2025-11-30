@@ -173,7 +173,7 @@ if __name__ == "__main__":
     plot_x_dist_evolution(snapshot, savepath, "x_dist.pdf", 0, args['L'], args['num_mesh'])
     
     # f(v)
-    plot_v_dist_evolution(snapshot, savepath, "v_dist.pdf", -15.0, 15.0, args['num_mesh'])
+    plot_v_dist_evolution(snapshot, savepath, "v_dist.pdf", -10.0, 10.0, args['num_mesh'])
 
     if args['simcase'] == "two-stream":
         plot_two_stream_evolution(snapshot, savepath, "phase_space_evolution.pdf", 0, args['L'], -10.0, 10.0)

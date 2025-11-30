@@ -72,10 +72,10 @@ def parsing():
     parser.add_argument("--alpha", type=float, default=1.0)
     parser.add_argument("--save_last", type=str, default="sac_last.pt")
     parser.add_argument("--save_best", type=str, default="sac_best.pt")
-    
+
     # Torch device
     parser.add_argument("--gpu_num", type=int, default=0)
-    
+
     # Setup
     parser.add_argument("--optimize", type=bool, default=False)
 
@@ -85,12 +85,18 @@ def parsing():
 # torch device state
 print("=============== Device setup ===============")
 print("torch cuda avaliable : ", torch.cuda.is_available())
-print("torch current gpu : ", torch.cuda.current_device())
-print("torch available gpus : ", torch.cuda.device_count())
 
-# torch cuda initialize and clear cache
-torch.cuda.init()
-torch.cuda.empty_cache()
+if torch.cuda.is_available():
+    print("torch current gpu : ", torch.cuda.current_device())
+    print("torch available gpus : ", torch.cuda.device_count())
+
+    # torch cuda initialize and clear cache
+    torch.cuda.init()
+    torch.cuda.empty_cache()
+else:
+    print("torch current gpu : None")
+    print("torch available gpus : None")
+    print("CPU computation")
 
 # memory cache delete
 gc.collect()

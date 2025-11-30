@@ -14,7 +14,9 @@ from src.plot import (
     plot_E_k_spectrum,
     plot_E_k_over_time, 
     plot_cost_over_time, 
-    plot_E_k_external_over_time
+    plot_E_k_external_over_time,
+    plot_x_dist_evolution,
+    plot_v_dist_evolution
 )
 
 def parsing():
@@ -60,7 +62,7 @@ def parsing():
     parser.add_argument("--mlp_dim", type=int, default=32)
     parser.add_argument("--r", type=float, default=0.995)
     parser.add_argument("--tau", type=float, default=0.1)
-    parser.add_argument("--capacity", type=int, default=1e5)
+    parser.add_argument("--capacity", type=int, default=100000)
     parser.add_argument("--batch_size", type=int, default=512)
     parser.add_argument("--num_episode", type=int, default=200)
     parser.add_argument("--verbose", type=int, default=10)
@@ -84,12 +86,18 @@ def parsing():
 # torch device state
 print("=============== Device setup ===============")
 print("torch cuda avaliable : ", torch.cuda.is_available())
-print("torch current gpu : ", torch.cuda.current_device())
-print("torch available gpus : ", torch.cuda.device_count())
 
-# torch cuda initialize and clear cache
-torch.cuda.init()
-torch.cuda.empty_cache()
+if torch.cuda.is_available():
+    print("torch current gpu : ", torch.cuda.current_device())
+    print("torch available gpus : ", torch.cuda.device_count())
+
+    # torch cuda initialize and clear cache
+    torch.cuda.init()
+    torch.cuda.empty_cache()
+else:
+    print("torch current gpu : None")
+    print("torch available gpus : None")
+    print("CPU computation")
 
 if __name__ == "__main__":
 
@@ -144,7 +152,7 @@ if __name__ == "__main__":
 
     # Controller
     input_dim = args['num_particle'] * 2
-    n_actions = 2 * args['max_mode']
+    n_actions = args['max_mode']
 
     q_network = Critic(input_dim, args["mlp_dim"], n_actions)
     p_network = Actor(input_dim, args["mlp_dim"], n_actions, output_min = args['coeff_min'], output_max = args['coeff_max'])
@@ -238,16 +246,13 @@ if __name__ == "__main__":
         # Update coefficients
         state = sim.get_state()
         coeffs = p_network.get_action(state, "cpu")
-        actuator.update_E(coeffs[:args['max_mode']], coeffs[args['max_mode']:])
+        actuator.update_E(None, coeffs)
 
         # Get action
         E_external = actuator.compute_E()
 
         # Update motion
         sim.update_state(E_external)
-
-        # Update coefficients integrated with collocation method
-        # sim.update_state_w_input_func(compute_input_E_field)
 
         # save current state
         E = sim.get_energy()
@@ -327,3 +332,10 @@ if __name__ == "__main__":
 
     # Amplitude of each external E field over time
     plot_E_k_external_over_time(args['t_max'], coeff_cos, coeff_sin, savepath, "Ek_t_external.pdf")
+    
+    # Distribution in a phase-space
+    # f(x)
+    plot_x_dist_evolution(snapshot, savepath, "x_dist.pdf", 0, args['L'], args['num_mesh'])
+    
+    # f(v)
+    plot_v_dist_evolution(snapshot, savepath, "v_dist.pdf", -10.0, 10.0, args['num_mesh'])
