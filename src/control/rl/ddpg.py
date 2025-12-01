@@ -174,7 +174,7 @@ class Critic(nn.Module):
         z = F.relu(self.fc1(self.norm1(z)))
         z = F.relu(self.fc2(self.norm2(z)))
         z = F.relu(self.fc3(self.norm3(z)))
-        q = F.tanh(self.fc_out(z))
+        q = self.fc_out(z)
         return q
 
 class OrnsteinUhlenbeckNoise:
@@ -200,7 +200,6 @@ class OrnsteinUhlenbeckNoise:
         dx = self.theta * (self.mu - self.state) + self.sigma * np.random.randn(self.size)
         self.state += dx
         return self.state
-
 
 # update policy
 def update_policy(
@@ -237,6 +236,9 @@ def update_policy(
     state_batch = torch.cat(batch.state).float().to(device)
     action_batch = torch.cat(batch.action).float().to(device)
     reward_batch = torch.cat(batch.reward).float().to(device)   
+    
+    # Normalize reward
+    reward_batch = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-3)
     
     done_batch = torch.tensor(batch.done, dtype=torch.float32, device=device).unsqueeze(1)  
 
@@ -301,6 +303,7 @@ def train(
     save_last: Optional[str] = None,
     save_best: Optional[str] = None,    
     alpha: float = 0.1,
+    beta: float = 0.1,
     noise_scale: float = 0.1,
     mu: float = 0.0, 
     theta: float = 0.15, 
@@ -314,7 +317,7 @@ def train(
         device = "cpu"
 
     # Reward class
-    reward_cls = Reward(env.init_dist.get_init_state(), env.N_mesh, env.L, -25.0, 25.0, env.n0, alpha)
+    reward_cls = Reward(env.init_dist.get_init_state(), env.N_mesh, env.L, -25.0, 25.0, env.n0, alpha, beta)
 
     # Trajectory
     q_loss_traj = []
@@ -354,7 +357,7 @@ def train(
             action = np.clip(action + noise, p_network.output_min, p_network.output_max)
 
             # update actuator
-            actuator.update_E(coeff_cos = None, coeff_sin = action)
+            actuator.update_E(coeff_cos = action[:p_network.n_actions//2], coeff_sin = action[p_network.n_actions//2:])
 
             # update state
             env.update_state(E_external=actuator.compute_E())
@@ -364,7 +367,7 @@ def train(
             next_state_tensor = torch.from_numpy(next_state).unsqueeze(0).float() 
 
             # compute cost
-            reward = reward_cls.compute_reward(state, None)           
+            reward = reward_cls.compute_reward(state, action)           
             reward_tensor = torch.tensor([reward])
 
             # save trajectory into memory

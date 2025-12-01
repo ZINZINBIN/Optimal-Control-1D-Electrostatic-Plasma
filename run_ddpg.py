@@ -74,7 +74,8 @@ def parsing():
     parser.add_argument("--sigma", type=float, default=0.25)
 
     # Cost parameters
-    parser.add_argument("--alpha", type=float, default=1.0)
+    parser.add_argument("--alpha", type=float, default=0.1)
+    parser.add_argument("--beta", type=float, default=0.02)
     parser.add_argument("--save_last", type=str, default="ddpg_last.pt")
     parser.add_argument("--save_best", type=str, default="ddpg_best.pt")
 
@@ -156,7 +157,7 @@ if __name__ == "__main__":
 
     # Controller
     input_dim = args['num_particle'] * 2
-    n_actions = args['max_mode']
+    n_actions = args['max_mode'] * 2
 
     q_network = Critic(input_dim, args["mlp_dim"], n_actions)
     p_network = Actor(input_dim, args["mlp_dim"], n_actions, output_min = args['coeff_min'], output_max = args['coeff_max'])
@@ -200,6 +201,7 @@ if __name__ == "__main__":
             os.path.join(filepath, args["save_last"]),
             os.path.join(filepath, args["save_best"]),
             args["alpha"],
+            args["beta"],
             args["noise_scale"],
             args['mu'],
             args['theta'],
@@ -216,8 +218,8 @@ if __name__ == "__main__":
         # save data
         savemat(file_name = os.path.join(filepath, "process.mat"), mdict=mdic, do_compression=True)
         
-    # plot the loss curve
-    plot_loss_curve(q_loss, p_loss, savepath, "loss.pdf")
+        # plot the loss curve
+        plot_loss_curve(q_loss, p_loss, savepath, "loss.pdf")
 
     # Trajectory of the system's state
     pos_list = []
@@ -240,23 +242,18 @@ if __name__ == "__main__":
     p_network.eval()
 
     # Compute the cost function
-    reward = Reward(sim.init_dist.get_init_state(), args['num_mesh'], args['L'], -25.0, 25.0, args['n0'], 1.0)
+    reward = Reward(sim.init_dist.get_init_state(), args['num_mesh'], args['L'], -25.0, 25.0, args['n0'], args['alpha'], args['beta'])
 
     cost_kl_list = []
     cost_ee_list = []
-
-    def compute_input_E_field(state:np.ndarray):
-        coeffs = p_network.get_action(state, "cpu")
-        actuator.update_E(coeffs[:args['max_mode']], coeffs[args['max_mode']:])
-        E_external = actuator.compute_E()
-        return E_external
+    cost_ie_list = []
 
     for idx_t in tqdm(range(Nt), "PIC simulation with E-field control"):
 
         # Update coefficients
         state = sim.get_state()
         coeffs = p_network.get_action(state, "cpu")
-        actuator.update_E(None, coeffs)
+        actuator.update_E(coeffs[:args['max_mode']], coeffs[args['max_mode']:])
 
         # Get action
         E_external = actuator.compute_E()
@@ -278,10 +275,12 @@ if __name__ == "__main__":
 
         # Compute code
         cost_kl = reward.compute_kl_divergence(sim.get_state())
-        cost_ee = reward.compute_electric_energy(sim.get_state(), None)
+        cost_ee = reward.compute_electric_energy(sim.get_state())
+        cost_ie = reward.compute_input_energy(coeffs)
 
         cost_kl_list.append(cost_kl)
         cost_ee_list.append(cost_ee)
+        cost_ie_list.append(cost_ie)
 
     qs = np.concatenate(pos_list, axis = 1)
     ps = np.concatenate(vel_list, axis = 1)
@@ -327,6 +326,7 @@ if __name__ == "__main__":
     cost = {
         r"$J_{KL}$":cost_kl_list,
         r"$J_{ee}$":cost_ee_list,
+        r"$J_{ie}$":cost_ie_list,
     }
 
     plot_cost_over_time(args['t_max'], Nt, cost, savepath, "cost.pdf")

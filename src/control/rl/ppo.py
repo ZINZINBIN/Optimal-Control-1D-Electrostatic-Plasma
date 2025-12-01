@@ -95,7 +95,7 @@ class ActorCritic(nn.Module):
 
         mu = self.fc_pi(z)
         std = self.log_std.exp().expand_as(mu).to(x.device)
-        value = F.tanh(self.fc_v(z))
+        value = self.fc_v(z)
 
         return mu, std, value
 
@@ -168,7 +168,7 @@ def update_policy(
     reward_batch = torch.cat(rewards).float().to(device)
     
     # Normalized reward for stable training
-    reward_batch = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-6)
+    reward_batch = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-3)
     
     loss_list = []
     
@@ -218,6 +218,7 @@ def train(
     save_last : Optional[str] = None,
     save_best : Optional[str] = None,
     alpha:float = 0.1,
+    beta:float = 0.1,
     k_epoch:int = 4,
     ):
 
@@ -225,7 +226,7 @@ def train(
         device = "cpu"
 
     # Reward class
-    reward_cls = Reward(env.init_dist.get_init_state(), env.N_mesh, env.L, -25.0, 25.0, env.n0, alpha)
+    reward_cls = Reward(env.init_dist.get_init_state(), env.N_mesh, env.L, -25.0, 25.0, env.n0, alpha, beta)
     
     # Trajectory
     loss_traj = []
@@ -256,7 +257,7 @@ def train(
             action = action_tensor.detach().squeeze(0).cpu().numpy()
 
             # update actuator
-            actuator.update_E(coeff_cos = None, coeff_sin = action)
+            actuator.update_E(coeff_cos = action[:policy_network.n_actions//2], coeff_sin = action[policy_network.n_actions//2:])
 
             # update state
             env.update_state(E_external=actuator.compute_E())
@@ -266,7 +267,7 @@ def train(
             next_state_tensor = torch.from_numpy(next_state).unsqueeze(0).float() 
 
             # compute cost
-            reward = reward_cls.compute_reward(state, None)
+            reward = reward_cls.compute_reward(state, action)
             reward_tensor = torch.tensor([reward]).float()
 
             # save trajectory into memory

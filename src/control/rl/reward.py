@@ -3,7 +3,17 @@ from src.control.objective import estimate_KL_divergence, estimate_f, estimate_e
 from typing import Optional
 
 class Reward:
-    def __init__(self, init_state:np.ndarray, N_mesh:int = 500, L:float = 50.0, vmin:float= -25.0, vmax:float = 25.0, n0:float = 1.0, alpha:float = 0.25):
+    def __init__(
+        self, 
+        init_state:np.ndarray, 
+        N_mesh:int = 500, 
+        L:float = 50.0, 
+        vmin:float= -25.0, 
+        vmax:float = 25.0, 
+        n0:float = 1.0, 
+        alpha:float = 1.0,
+        beta:float = 1.0,
+        ):
         self.feq = estimate_f(init_state, N_mesh, L, vmin, vmax, n0)
         self.init_state = init_state
         self.N_mesh = N_mesh
@@ -14,6 +24,7 @@ class Reward:
         
         # Multiplier
         self.alpha = alpha
+        self.beta = beta
 
     def update_params(self, **kwargs):
         for key in kwargs.keys():
@@ -33,13 +44,14 @@ class Reward:
         return PE
     
     def compute_input_energy(self, actions:np.ndarray):
-        PE = np.sum(actions ** 2) * self.L / 2
+        PE = np.sum(actions ** 2) * self.L * 0.25
         return PE
     
     def compute_cost(self, state:np.ndarray, action:np.ndarray):
         r_kl = self.compute_kl_divergence(state)
         r_pe = self.compute_electric_energy(state)
-        return r_kl + self.alpha * r_pe
+        r_ie = self.compute_input_energy(action)
+        return r_kl, r_pe, r_ie
     
     def compute_reward_kl_divergence(self, state:np.ndarray):
         return np.tanh(1 - np.sqrt(self.compute_kl_divergence(state) / 25))
@@ -51,6 +63,8 @@ class Reward:
         return np.tanh(1 - np.sqrt(self.compute_input_energy(action) / 50.0))
     
     def compute_reward(self, state:np.ndarray, E_external:Optional[np.ndarray] = None):
-        r_pe = self.compute_reward_electric_energy(state, E_external)
-        reward = r_pe * self.alpha
+        r_pe = self.compute_electric_energy(state)
+        r_ie = self.compute_input_energy(E_external)
+
+        reward = r_pe * self.alpha + r_ie * self.beta
         return reward
