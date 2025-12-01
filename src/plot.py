@@ -727,6 +727,44 @@ def plot_E_k_external_over_time(
 
     return fig, ax
 
+def plot_loss_curve(
+    q_loss:Optional[np.array],
+    p_loss:Optional[np.array],
+    save_dir:Optional[str],
+    filename:Optional[str],
+):
+    # check directory
+    if save_dir is not None:
+
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+
+        filepath = os.path.join(save_dir, filename)
+
+    else:
+        filepath = None
+        
+    fig, ax = plt.subplots(1, 1, figsize=(5, 3), facecolor="white", dpi=120)
+    
+    if q_loss is not None:
+        ax.plot(q_loss, label = r"q loss")
+    
+    if p_loss is not None:
+        ax.plot(p_loss, label = r"p loss")
+    
+    ax.set_xlabel(r"Episode")
+    ax.set_ylabel("Loss")
+    ax.set_yscale("log")
+    ax.legend()
+    ax.grid(True)
+
+    fig.tight_layout()
+
+    if filepath is not None:
+        plt.savefig(filepath, dpi=120)
+
+    return fig, ax
+
 def plot_cost_over_time(
     tmax:float,
     Nt:int,

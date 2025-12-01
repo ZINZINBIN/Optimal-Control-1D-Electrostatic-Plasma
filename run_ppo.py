@@ -14,7 +14,10 @@ from src.plot import (
     plot_E_k_spectrum,
     plot_E_k_over_time, 
     plot_cost_over_time, 
-    plot_E_k_external_over_time
+    plot_E_k_external_over_time,
+    plot_x_dist_evolution,
+    plot_v_dist_evolution,
+    plot_loss_curve
 )
 
 def parsing():
@@ -28,8 +31,8 @@ def parsing():
     parser.add_argument("--save_file", type=str, default="./dataset/")
 
     # PIC parameters (default)
-    parser.add_argument("--num_particle", type = int, default = 10000)  
-    parser.add_argument("--num_mesh", type = int, default = 500)        
+    parser.add_argument("--num_particle", type = int, default = 5000)  
+    parser.add_argument("--num_mesh", type = int, default = 250)        
     parser.add_argument("--t_min", type = float, default = 0)
     parser.add_argument("--t_max", type = float, default = 50)
     parser.add_argument("--dt", type = float, default = 0.05)          
@@ -46,7 +49,7 @@ def parsing():
 
     # Initial perturbation parameters (both cases)
     parser.add_argument("--A", type = float, default = 0.1)
-    parser.add_argument("--n_mode", type = int, default = 3)
+    parser.add_argument("--n_mode", type = int, default = 2)
 
     # Distribution parameters (Bump-on-tail)
     parser.add_argument("--a", type = float, default = 0.2)   
@@ -57,14 +60,14 @@ def parsing():
     parser.add_argument("--coeff_min", type=float, default= -1.0)
 
     # Network
-    parser.add_argument("--mlp_dim", type = int, default = 32)
+    parser.add_argument("--mlp_dim", type = int, default = 64)
     parser.add_argument("--r", type =float, default = 0.995)
     parser.add_argument("--std", type = float, default = 0.5)
-    parser.add_argument("--capacity", type=int, default= 5)
+    parser.add_argument("--capacity", type=int, default= 8)
     parser.add_argument("--eps_clip", type=float, default=0.25)
     parser.add_argument("--entropy_coeff", type=float, default=0.10)
     parser.add_argument("--value_coeff", type=float, default=0.20)
-    parser.add_argument("--num_episode", type=int, default=1000)
+    parser.add_argument("--num_episode", type=int, default=200)
     parser.add_argument("--verbose", type=int, default=10)
     parser.add_argument("--lr", type=float, default=5e-4)
     parser.add_argument("--k_epoch", type=int, default=4)
@@ -152,11 +155,11 @@ if __name__ == "__main__":
 
     # Controller
     input_dim = args['num_particle'] * 2
-    n_actions = 2 * args['max_mode']
+    n_actions = args['max_mode']
     network = ActorCritic(input_dim, args['mlp_dim'], n_actions, args['std'], output_min = args['coeff_min'], output_max = args['coeff_max'])
     network.to(device)
 
-    optimizer = torch.optim.Adam(network.parameters(), lr = args['lr'])
+    optimizer = torch.optim.RMSprop(network.parameters(), lr = args['lr'])
 
     # maximum simulation time (integer)
     Nt = int(np.ceil((args['t_max'] - args['t_min']) / args['dt']))
@@ -195,6 +198,8 @@ if __name__ == "__main__":
 
         # save data
         savemat(file_name = os.path.join(filepath, "process.mat"), mdict=mdic, do_compression=True)
+        
+    plot_loss_curve(None, loss, savepath, "loss.pdf")
 
     # Trajectory of the system's state
     pos_list = []
@@ -221,27 +226,19 @@ if __name__ == "__main__":
     
     cost_kl_list = []
     cost_ee_list = []
-    
-    def compute_input_E_field(state:np.ndarray):
-        coeffs = network.get_action(state)
-        actuator.update_E(coeffs[:args['max_mode']], coeffs[args['max_mode']:])
-        E_external = actuator.compute_E()
-        return E_external
-        
+     
     for idx_t in tqdm(range(Nt), "PIC simulation with E-field control"):
         
-        # # Update coefficients
-        # state = sim.get_state()
-        # coeffs = network.get_action(state)
-        # actuator.update_E(coeffs[:args['max_mode']], coeffs[args['max_mode']:])
+        # Update coefficients
+        state = sim.get_state()
+        coeffs = network.get_action(state)
+        actuator.update_E(None, coeffs)
 
-        # # Get action
-        # E_external = actuator.compute_E()
+        # Get action
+        E_external = actuator.compute_E()
         
-        # # Update motion
-        # sim.update_state(E_external)
-        
-        sim.update_state_w_input_func(compute_input_E_field)
+        # Update motion
+        sim.update_state(E_external)       
         
         # save current state
         E = sim.get_energy()
@@ -257,7 +254,7 @@ if __name__ == "__main__":
         
         # Compute code
         cost_kl = reward.compute_kl_divergence(sim.get_state())
-        cost_ee = reward.compute_electric_energy(sim.get_state(), actuator.compute_E())
+        cost_ee = reward.compute_electric_energy(sim.get_state(), None)
         
         cost_kl_list.append(cost_kl)
         cost_ee_list.append(cost_ee)
@@ -321,3 +318,10 @@ if __name__ == "__main__":
 
     # Amplitude of each external E field over time
     plot_E_k_external_over_time(args['t_max'], coeff_cos, coeff_sin, savepath, "Ek_t_external.pdf")
+    
+    # Distribution in a phase-space
+    # f(x)
+    plot_x_dist_evolution(snapshot, savepath, "x_dist.pdf", 0, args['L'], args['num_mesh'])
+    
+    # f(v)
+    plot_v_dist_evolution(snapshot, savepath, "v_dist.pdf", -10.0, 10.0, args['num_mesh'])

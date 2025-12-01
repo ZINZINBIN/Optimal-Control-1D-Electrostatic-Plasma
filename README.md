@@ -1,9 +1,7 @@
-# Optimal control for the instability suppression in an electrostatic plasma system
+# Optimal control for the instability suppression in an electrostatic plasma system via reinforcement learning
 ## 🧭 Introduction
 
-This repository provides **code and simulation tools** for the **optimal control of an external electric field** to suppress the **bump-on-tail instability** in a **one-dimensional electrostatic plasma system** governed by the **Vlasov–Poisson equations**.  
-
-The project combines **Particle-In-Cell (PIC) simulations** with **numerical optimal control** techniques to design and apply an external control field that stabilizes the plasma distribution function.  
+This repository provides **code and simulation tools** for the **optimal control of an external electric field** to suppress the **bump-on-tail instability** in a **one-dimensional electrostatic plasma system** governed by the **Vlasov–Poisson equations** by using reinforcement learning. We integrate a Particle-In-Cell simulation with optimal control by solving a Hamilton-Jacobi-Bellman equation with reinforcement learning, and verify the suppression of instabilities using a linear damping rate and Fourier analysis. 
 
 The repository includes:
 - A **PIC simulation code** for solving the 1D Vlasov–Poisson system.
@@ -16,74 +14,75 @@ The repository includes:
 
 ### 1. Electrostatic Plasma and Vlasov–Poisson System
 
-The **Vlasov–Poisson system** describes the self-consistent evolution of a collisionless plasma under an electrostatic potential.  
-In one spatial dimension, it is written as:
+The **Vlasov-Poisson equation** is a differential equation that describes the time-evolving distribution function of a collisionless plasma \cite{swanson2008plasma}. For a one-dimensional electrostatic plasma on a short timescale, we can neglect the magnetic field term and assume the ions are stationary, allowing electron motion to dominate the dynamics. 
 
 ```math
-\frac{\partial f(x, v, t)}{\partial t} + v \frac{\partial f(x, v, t)}{\partial x} + \frac{q}{m} E(x, t) \frac{\partial f(x, v, t)}{\partial v} = 0,
+\begin{aligned}
+\frac{\partial f_e}{\partial t} + v \cdot \nabla_x f_e - E \cdot \nabla_v f_e = 0 \\
+\nabla^2 \phi(x,t) = \int f_edv - 1 \\
+E(x,t) = -\nabla \phi(x,t) + E_{ex}(x,t) \\
+\end{aligned}
 ```
 
-where  
-- \( f(x, v, t) \): distribution function of charged particles  
-- \( q, m \): particle charge and mass  
-- \( E(x, t) = -\frac{\partial \phi(x, t)}{\partial x} \): electric field  
-- \( \phi(x, t) \): electrostatic potential determined by Poisson’s equation  
+Here, $f_e(x,v,t)$ is a distribution function of electrons on a phase space, $E$ and $\phi$ are the electric field and its potential, respectively. The electrons in this systems follow the equation described below.
 
 ```math
-\frac{\partial^2 \phi}{\partial x^2} = -\frac{q}{\epsilon_0} \left( n(x, t) - n_0 \right),
+\begin{aligned}
+\dot{x} &=v \\
+\dot{v} &=-E \\
+E_{ex} &=\sum_{n}{a_n\sin\frac{2\pi n x}{L} + b_n\cos\frac{2\pi n x}{L}}
+\end{aligned}
 ```
-with \( n(x, t) = \int f(x, v, t) \, dv \).
 
-These coupled equations govern how an initially perturbed distribution function evolves due to **collective plasma oscillations** and **instabilities**.
+Here, $E_{ex}$ is a parameterized external electric field that serves as a control input to suppress the instability. For numerical simulations, we use Particle-In-Cell method, discretizing the system by $N$ super-particles with a particle-grid mapping.
 
 ---
 
 ### 2. Bump-on-Tail Instability
 
-The **bump-on-tail instability** arises when a **non-Maxwellian distribution** contains a **“bump” (high-energy tail)** in velocity space, typically caused by a **fast electron beam** injected into a background plasma.  
+The **Bump-on-tail instability** is a complex kinetic instability induced by the plasma-wave interaction. Suppose the high-energy electrons are injected into the thermalized plasma, which results in a **non-Maxwellian distribution** with a **“bump” (high-energy tail)** in velocity space. The distribution of electrons in a velocity space is then given as below, generating a bump on the tail of the distribution. 
 
-This bump introduces a **positive slope** in the velocity distribution function \( \partial f / \partial v > 0 \), which enables **wave-particle resonance** and the **growth of Langmuir waves**.  
+```math
+f_0(v)=\frac{1}{(1+a)\sqrt{2\pi}} e^{-\frac{v^2}{2 v_{th}^2}} + \frac{a}{(1+a)\sqrt{2\pi}} e^{-\frac{(v-v_b)^2}{2 v_{th}^2}}
+```
 
-Over time, this leads to:
-- **Energy transfer** from particles to waves  
-- **Phase-space vortex formation**  
-- **Flattening** of the velocity distribution (quasilinear diffusion)  
-
-Suppressing this instability is crucial in applications such as:
-- Plasma heating and transport control  
-- Space and astrophysical plasmas  
-- Controlled fusion devices  
+This bump introduces a **positive slope** in the velocity distribution function $\partial f / \partial v > 0$, which enables **wave-particle resonance** and the **growth of Langmuir waves**. This transfers the energy from particles to the wave, results in a growth of the wave perturbation and is oscillated at the nonlinear stage.
 
 ---
 
 ### 3. Optimal Control
+The **Bump-on-tail instability** itself leads to 
 
-This project formulates an **optimal control problem** to design an **external electric field \( E_c(t) \)** that minimizes the energy growth associated with the bump-on-tail instability.
+- **Energy transfer** from particles to waves  
+- **Phase-space vortex formation**  
+- **Flattening** of the velocity distribution (quasilinear diffusion)  
+
+Thus, suppressing this instability is crucial in several applications such as:
+- Plasma heating and transport control  
+- Space and astrophysical plasmas  
+- Controlled fusion devices  
 
 #### Objective Functional
 
-We define a cost functional \( J \) that balances **stabilization performance** and **control effort**:
+This project formulates an **optimal control problem** to design an **external electric field** that minimizes the energy growth associated with the bump-on-tail instability. We define a cost functional that balances **stabilization performance** and **control effort**:
 
-\[
-J = \frac{1}{2} \int_0^T \left[ \| E(x, t) \|^2 + \lambda \| E_c(t) \|^2 \right] dt,
-\]
+```math
+J:= \text{KL}[f(t=T),f_{0}] + \int_{0}^T \int_0^L|\nabla \phi(x,t)|^2 dxdt + \lambda \int_{0}^T \int_0^L|E_{ex}(x,t)|^2 dxdt
+```
 
-where  
-- \( E(x, t) \): self-consistent field from the plasma  
-- \( E_c(t) \): external control field to be optimized  
-- \( \lambda \): regularization parameter controlling the trade-off between suppression and energy cost  
+where the first term represents the KL-divergence between the final and initial distributions, which should be minimized to maintain the distribution. The second term corresponds to the electric energy generated by the electrons and should be reduced by suppression. Finally, the third term denotes the electric energy of the external fields, which should be minimized to enhance overall efficiency. 
 
 #### Optimization Method
 
-The optimization loop involves:
-1. **Forward Simulation (PIC):**  
-   Solve the Vlasov–Poisson system with a candidate control field.  
-2. **Adjoint Calculation:**  
-   Compute gradients of the cost functional using adjoint equations or numerical sensitivities.  
-3. **Control Update:**  
-   Update \( E_c(t) \) via a gradient-based optimizer (e.g., conjugate gradient or L-BFGS).  
+One might be issued to apply the optimal control for this PDE-constrained optimization problem since $f(x,v,t)$ follows high-dimensional nonlinear dynamics which makes it intractable to directly solve this PDE. Among the various methods, we choose DDPG (Deep Deterministic Policy Gradient), which is a continuous-action actor–critic algorithm.
 
-This iterative procedure continues until the instability is effectively suppressed or the cost functional converges below a threshold.
+The critic approximates the value function $V$. The actor approximates the optimal feedback control $u^{*}(f)$. This is exactly what the HJB equation encodes: The critic network learns an approximation to the value function, effectively learning a numerical solution to the HJB equation. The actor network implements:
+
+```math
+u^{*}(f):=\argmin_u H(f,u)
+```
+
+where $H$ is the control Hamiltonian in the HJB equation. Thus, DDPG = approximate dynamic programming = HJB value iteration in continuous control.
 
 ---
 
@@ -91,67 +90,37 @@ This iterative procedure continues until the instability is effectively suppress
 
 ```
 📦 optimal-control-vlasov
-├── src/
-│   ├── pic_solver.py          # Particle-In-Cell simulation for Vlasov-Poisson system
-│   ├── control_optimization.py # Optimal control algorithm
-│   ├── adjoint_solver.py      # Adjoint-based gradient computation
-│   ├── visualization.py       # Tools for plotting f(x,v), E(x), etc.
-│   └── utils.py               # Utility functions
-├── data/
-│   ├── initial_conditions/
-│   ├── results/
-│   └── figures/
-├── examples/
-│   └── bump_on_tail_control.py
-├── README.md
-└── requirements.txt
-```
 
+```
 ---
 
 ## 🚀 How to Run
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/optimal-control-vlasov.git
+git clone https://github.com/ZINZINBIN/Optimal-Control-1D-Electrostatic-Plasma.git
 cd optimal-control-vlasov
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Run simulation example
-python examples/bump_on_tail_control.py
+# Run simulation with optimal control
+python3 run.py
 ```
 
 ---
-
 ## 📊 Results
-
-The optimization algorithm generates:
-- Suppressed electric field growth (stabilized plasma)
-- Controlled energy exchange between field and particles
-- Smoothed velocity distribution (bump suppression)
-
-Example output plots:
-- Distribution function \( f(x,v,t) \)
-- Time evolution of electric field amplitude
-- Control field \( E_c(t) \) profile
-- Cost functional convergence
 
 ---
 
 ## 📘 Reference
-
-1. J. P. Boyd, *The Vlasov–Poisson System and Plasma Waves*, Springer, 2003.  
-2. F. Filbet and E. Sonnendrücker, “Comparison of Eulerian Vlasov Solvers,” *Comput. Phys. Commun.*, 150(3):247–266, 2003.  
-3. C. K. Birdsall and A. B. Langdon, *Plasma Physics via Computer Simulation*, IOP Publishing, 2004.  
-4. L. Chacón et al., “Optimal Control of Plasma Instabilities,” *Phys. Plasmas*, 27(12):122301, 2020.  
-
----
-
-## 🧠 Acknowledgment
-
-This work integrates methods from plasma kinetic theory, numerical optimization, and control theory. The authors acknowledge open-source scientific Python packages such as **NumPy**, **SciPy**, and **Matplotlib**, which form the computational backbone of this project.
+1. Donald Gary Swanson. Plasma kinetic theory. Crc Press, 2008.
+2. Giovanni Lapenta. Particle in cell methods. In With Application to
+Simulations in Space. Weather. Citeseer, 2016.
+3. Luiz Fernando Ziebell, Rudi Gaelzer, and Peter H Yoon. Nonlinear
+development of weak beam–plasma instability. Physics of Plasmas,
+8(9):3982–3995, 2001.
+4. I. Dodin. Plasma waves and instabilities, 2025.
+5. John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and
+Oleg Klimov. Proximal policy optimization algorithms. arXiv preprint
+arXiv:1707.06347, 2017.
 
 ---
 
@@ -167,9 +136,9 @@ If you use this code or results in your research, please cite this repository:
 
 ```bibtex
 @software{yourname2025optimalcontrol,
-  author = {Your Name},
+  author = {Jinsu Kim},
   title = {Optimal Control of External Electric Field for Suppressing Bump-on-Tail Instability in a 1D Vlasov–Poisson Plasma},
   year = {2025},
-  url = {https://github.com/your-username/optimal-control-vlasov}
+  url = {https://github.com/ZINZINBIN/Optimal-Control-1D-Electrostatic-Plasma}
 }
 ```

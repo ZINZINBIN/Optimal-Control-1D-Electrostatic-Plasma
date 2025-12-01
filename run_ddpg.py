@@ -16,7 +16,8 @@ from src.plot import (
     plot_cost_over_time, 
     plot_E_k_external_over_time,
     plot_x_dist_evolution,
-    plot_v_dist_evolution
+    plot_v_dist_evolution,
+    plot_loss_curve
 )
 
 def parsing():
@@ -54,20 +55,23 @@ def parsing():
     parser.add_argument("--a", type = float, default = 0.2)   
 
     # Controller
-    parser.add_argument("--max_mode", type = int, default = 4)
-    parser.add_argument("--coeff_max", type=float, default= 1.0)
-    parser.add_argument("--coeff_min", type=float, default= -1.0)
+    parser.add_argument("--max_mode", type = int, default = 5)
+    parser.add_argument("--coeff_max", type=float, default= 1.2)
+    parser.add_argument("--coeff_min", type=float, default= -1.2)
 
     # Network
-    parser.add_argument("--mlp_dim", type=int, default=32)
+    parser.add_argument("--mlp_dim", type=int, default=64)
     parser.add_argument("--r", type=float, default=0.995)
-    parser.add_argument("--tau", type=float, default=0.1)
+    parser.add_argument("--tau", type=float, default=0.05)
     parser.add_argument("--capacity", type=int, default=100000)
     parser.add_argument("--batch_size", type=int, default=512)
-    parser.add_argument("--num_episode", type=int, default=200)
+    parser.add_argument("--num_episode", type=int, default=500)
     parser.add_argument("--verbose", type=int, default=10)
     parser.add_argument("--lr", type=float, default=5e-4)
     parser.add_argument("--noise_scale", type=float, default=0.1)
+    parser.add_argument("--mu", type=float, default=0.0)
+    parser.add_argument("--theta", type=float, default=0.20)
+    parser.add_argument("--sigma", type=float, default=0.25)
 
     # Cost parameters
     parser.add_argument("--alpha", type=float, default=1.0)
@@ -197,6 +201,9 @@ if __name__ == "__main__":
             os.path.join(filepath, args["save_best"]),
             args["alpha"],
             args["noise_scale"],
+            args['mu'],
+            args['theta'],
+            args['sigma']
         )
 
         # save optimization process
@@ -208,6 +215,9 @@ if __name__ == "__main__":
 
         # save data
         savemat(file_name = os.path.join(filepath, "process.mat"), mdict=mdic, do_compression=True)
+        
+    # plot the loss curve
+    plot_loss_curve(q_loss, p_loss, savepath, "loss.pdf")
 
     # Trajectory of the system's state
     pos_list = []
@@ -279,9 +289,16 @@ if __name__ == "__main__":
 
     E = np.array(E_list)
     PE = np.array(PE_list)
-
-    coeff_cos = np.concatenate(coeff_cos, axis = 1)
-    coeff_sin = np.concatenate(coeff_sin, axis = 1)
+    
+    if len(coeff_cos) > 0:
+        coeff_cos = np.concatenate(coeff_cos, axis = 1)
+    else:
+        coeff_cos = 0
+    
+    if len(coeff_sin) > 0:
+        coeff_sin = np.concatenate(coeff_sin, axis = 1)
+    else: 
+        coeff_sin = 0
 
     mdic = {
         "snapshot": snapshot,

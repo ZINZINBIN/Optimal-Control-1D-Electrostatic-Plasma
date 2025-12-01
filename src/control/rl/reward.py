@@ -39,7 +39,6 @@ class Reward:
     def compute_cost(self, state:np.ndarray, action:np.ndarray):
         r_kl = self.compute_kl_divergence(state)
         r_pe = self.compute_electric_energy(state)
-        r_in = self.compute_input_energy(action)
         return r_kl + self.alpha * r_pe
     
     def compute_reward_kl_divergence(self, state:np.ndarray):
@@ -52,7 +51,6 @@ class Reward:
         return np.tanh(1 - np.sqrt(self.compute_input_energy(action) / 50.0))
     
     def compute_reward(self, state:np.ndarray, E_external:Optional[np.ndarray] = None):
-        # r_kl = self.compute_reward_kl_divergence(state)
         r_pe = self.compute_reward_electric_energy(state, E_external)
         reward = r_pe * self.alpha
         return reward

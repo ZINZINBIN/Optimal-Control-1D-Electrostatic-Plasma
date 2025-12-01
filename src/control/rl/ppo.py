@@ -8,7 +8,6 @@ import numpy as np
 from collections import namedtuple, deque
 from src.env.pic import PIC
 from src.control.rl.reward import Reward
-from src.control.rl.encode import Encoder
 from src.control.actuator import E_field
 
 torch.backends.cudnn.benchmark = True
@@ -19,9 +18,10 @@ Transition = namedtuple(
     ('state','action','next_state','reward','done','prob_a')
 )
 
-def hidden_init(layer:torch.nn.Linear):
-    fan_in = layer.weight.data.size()[0]
-    lim = 1. / np.sqrt(fan_in)
+# Function for initialization
+def hidden_init(layer: torch.nn.Linear):
+    fan_in = layer.weight.data.size()[1]
+    lim = 1.0 / np.sqrt(fan_in)
     return (-lim, lim)
 
 class ReplayBuffer(object):
@@ -57,10 +57,8 @@ class ActorCritic(nn.Module):
         self.x_norm = x_norm
         self.v_norm = v_norm
         
-        self.encoder = Encoder(2, mlp_dim, mlp_dim, 5, 3, 1)
-
-        self.fc1 = nn.Linear(mlp_dim, mlp_dim)
-        self.norm1 = nn.LayerNorm(mlp_dim)
+        self.fc1 = nn.Linear(input_dim, mlp_dim)
+        self.norm1 = nn.LayerNorm(input_dim)
 
         self.fc2 = nn.Linear(mlp_dim, mlp_dim)
         self.norm2 = nn.LayerNorm(mlp_dim)
@@ -87,16 +85,17 @@ class ActorCritic(nn.Module):
         self.fc_v.weight.data.uniform_(*hidden_init(self.fc_v))
 
     def forward(self, x:torch.Tensor):
-        z = torch.stack([x.clone()[:,:self.input_dim//2] / self.x_norm, x.clone()[:,self.input_dim//2:] / self.v_norm], dim=1)
-        z = self.encoder(z).mean(dim = -1)
+        x_pos = x[:,:self.input_dim//2] / self.x_norm
+        x_vel = x[:,self.input_dim//2:] / self.v_norm
         
-        z = F.tanh(self.fc1(self.norm1(z)))
-        z = F.tanh(self.fc2(self.norm2(z)))
-        z = F.tanh(self.fc3(self.norm3(z)))
+        z = torch.cat([x_pos, x_vel], dim=1)
+        z = F.relu(self.fc1(self.norm1(z)))
+        z = F.relu(self.fc2(self.norm2(z)))
+        z = F.relu(self.fc3(self.norm3(z)))
 
         mu = self.fc_pi(z)
         std = self.log_std.exp().expand_as(mu).to(x.device)
-        value = self.fc_v(z)
+        value = F.tanh(self.fc_v(z))
 
         return mu, std, value
 
@@ -120,7 +119,7 @@ class ActorCritic(nn.Module):
 
         return action, entropy, log_probs, value
 
-    def get_action(self, x:np.ndarray):
+    def get_action(self, x:np.ndarray)->np.ndarray:
         x = x.ravel()
         state = torch.from_numpy(x).unsqueeze(0).float()
         
@@ -168,7 +167,7 @@ def update_policy(
         
     reward_batch = torch.cat(rewards).float().to(device)
     
-    # Normalizing the rewards
+    # Normalized reward for stable training
     reward_batch = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-6)
     
     loss_list = []
@@ -186,7 +185,7 @@ def update_policy(
         
         surr1 = ratio * delta
         surr2 = torch.clamp(ratio, 1 - eps_clip, 1 + eps_clip) * delta
-        loss = -torch.min(surr1, surr2) + value_coeff * criterion(value, td_target.detach()) - entropy_coeff * entropy
+        loss = -torch.min(surr1, surr2) + value_coeff * criterion(value, reward_batch.view_as(value)) - entropy_coeff * entropy
         loss = loss.mean()
         loss.backward()
         
@@ -257,7 +256,7 @@ def train(
             action = action_tensor.detach().squeeze(0).cpu().numpy()
 
             # update actuator
-            actuator.update_E(coeff_cos = action[:policy_network.n_actions//2], coeff_sin = action[policy_network.n_actions//2:])
+            actuator.update_E(coeff_cos = None, coeff_sin = action)
 
             # update state
             env.update_state(E_external=actuator.compute_E())
@@ -267,7 +266,7 @@ def train(
             next_state_tensor = torch.from_numpy(next_state).unsqueeze(0).float() 
 
             # compute cost
-            reward = reward_cls.compute_reward(state, actuator.compute_E())
+            reward = reward_cls.compute_reward(state, None)
             reward_tensor = torch.tensor([reward]).float()
 
             # save trajectory into memory

@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from tqdm.auto import tqdm
 from typing import Optional
 import numpy as np
-import random
+import random, gc
 from collections import namedtuple, deque
 from src.env.pic import PIC
 from src.control.rl.reward import Reward
@@ -103,10 +103,9 @@ class Actor(nn.Module):
         x_vel = x[:,self.input_dim//2:] / self.v_norm
         
         z = torch.cat([x_pos, x_vel], dim=1)
-        z = F.tanh(self.fc1(self.norm1(z)))
-        z = F.tanh(self.fc2(self.norm2(z)))
-        z = F.tanh(self.fc3(self.norm3(z)))
-
+        z = F.relu(self.fc1(self.norm1(z)))
+        z = F.relu(self.fc2(self.norm2(z)))
+        z = F.relu(self.fc3(self.norm3(z)))
         mu = F.tanh(self.fc_out(z))
         
         return mu
@@ -172,9 +171,9 @@ class Critic(nn.Module):
         x_vel = x[:,self.input_dim//2:] / self.v_norm
         
         z = torch.cat([x_pos, x_vel, a], dim=1)
-        z = F.tanh(self.fc1(self.norm1(z)))
-        z = F.tanh(self.fc2(self.norm2(z)))
-        z = F.tanh(self.fc3(self.norm3(z)))
+        z = F.relu(self.fc1(self.norm1(z)))
+        z = F.relu(self.fc2(self.norm2(z)))
+        z = F.relu(self.fc3(self.norm3(z)))
         q = F.tanh(self.fc_out(z))
         return q
 
@@ -238,6 +237,8 @@ def update_policy(
     state_batch = torch.cat(batch.state).float().to(device)
     action_batch = torch.cat(batch.action).float().to(device)
     reward_batch = torch.cat(batch.reward).float().to(device)   
+    
+    done_batch = torch.tensor(batch.done, dtype=torch.float32, device=device).unsqueeze(1)  
 
     non_final_next_states = torch.cat([s for s in batch.next_state if s is not None]).to(device)
     non_final_mask = torch.tensor(tuple(map(lambda s : s is not None, batch.next_state)), device = device, dtype = torch.bool)
@@ -245,7 +246,7 @@ def update_policy(
     with torch.no_grad():
         next_action = target_p_network.sample(non_final_next_states)
         target_q = target_q_network(non_final_next_states, next_action)
-        target_q = reward_batch.unsqueeze(1) + gamma * target_q
+        target_q = reward_batch.unsqueeze(1) + gamma * (1 - done_batch) * target_q
 
     # Update Q network
     q = q_network(state_batch, action_batch)
@@ -260,8 +261,10 @@ def update_policy(
 
     # Update policy network
     action_batch_sampled = p_network.sample(state_batch)
-    p_loss = (-1) * q_network(state_batch, action_batch_sampled).mean()
     
+    q_network.eval()
+    p_loss = (-1) * q_network(state_batch, action_batch_sampled).mean()
+        
     p_optimizer.zero_grad()
     p_loss.backward()
 
@@ -299,10 +302,13 @@ def train(
     save_best: Optional[str] = None,    
     alpha: float = 0.1,
     noise_scale: float = 0.1,
+    mu: float = 0.0, 
+    theta: float = 0.15, 
+    sigma: float = 0.2
 ):
 
     # minimum buffer size to start training
-    min_buffer_size = 1024
+    min_buffer_size = 10000
 
     if device is None:
         device = "cpu"
@@ -318,7 +324,7 @@ def train(
     best_reward = None
 
     # Ornstein-Uhlenbeck noise
-    ou_noise = OrnsteinUhlenbeckNoise(p_network.n_actions)
+    ou_noise = OrnsteinUhlenbeckNoise(p_network.n_actions, mu, theta, sigma)
 
     for i_episode in tqdm(range(num_episode), desc = '# Training DDPG controller...'):
 
@@ -366,7 +372,7 @@ def train(
             memory.push(state_tensor, action_tensor, next_state_tensor, reward_tensor, done)
 
             # update policy
-            if memory.__len__() >= min_buffer_size and idx_t % 4 == 0:
+            if memory.__len__() >= min_buffer_size:
 
                 q_loss, p_loss = update_policy(
                     memory,
@@ -394,23 +400,27 @@ def train(
                 print("| episode:{} | simulation terminated with progress: {:.1f} percent".format(i_episode+1, 100 * (idx_t + 1)/Nt))
                 break
 
-        if i_episode % verbose == 0:
+        if i_episode % verbose == 0 and memory.__len__() >= min_buffer_size:
             print("| episode:{} | p loss:{:.4f} | q loss:{:.4f} | reward:{:.4f}".format(i_episode+1, p_loss_list[-1], q_loss_list[-1], reward))
 
-        reward_mean = np.mean(reward_list)
-        q_loss_mean = np.mean(q_loss_list)
-        p_loss_mean = np.mean(p_loss_list)
+        if len(q_loss_list) > 0:
+            reward_mean = np.mean(reward_list)
+            q_loss_mean = np.mean(q_loss_list)
+            p_loss_mean = np.mean(p_loss_list)
 
-        reward_traj.append(reward_mean)
-        q_loss_traj.append(q_loss_mean)
-        p_loss_traj.append(p_loss_mean)
+            reward_traj.append(reward_mean)
+            q_loss_traj.append(q_loss_mean)
+            p_loss_traj.append(p_loss_mean)
 
-        if best_reward is not None:
-            if reward_mean > best_reward:
+            if best_reward is not None:
+                if reward_mean > best_reward:
+                    torch.save(p_network.state_dict(), save_best)
+            else:
+                best_reward = reward_mean
                 torch.save(p_network.state_dict(), save_best)
-        else:
-            best_reward = reward_mean
-            torch.save(p_network.state_dict(), save_best)
+                
+        # memory cache delete
+        gc.collect()
 
     print("# Training DDPG controller process complete")
 
