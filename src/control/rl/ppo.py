@@ -58,7 +58,7 @@ class ActorCritic(nn.Module):
         self.v_norm = v_norm
         
         self.fc1 = nn.Linear(input_dim, mlp_dim)
-        self.norm1 = nn.LayerNorm(input_dim)
+        self.norm1 = nn.LayerNorm(mlp_dim)
 
         self.fc2 = nn.Linear(mlp_dim, mlp_dim)
         self.norm2 = nn.LayerNorm(mlp_dim)
@@ -89,11 +89,11 @@ class ActorCritic(nn.Module):
         x_vel = x[:,self.input_dim//2:] / self.v_norm
         
         z = torch.cat([x_pos, x_vel], dim=1)
-        z = F.relu(self.fc1(self.norm1(z)))
-        z = F.relu(self.fc2(self.norm2(z)))
-        z = F.relu(self.fc3(self.norm3(z)))
+        z = F.relu(self.norm1(self.fc1(z)))
+        z = F.relu(self.norm2(self.fc2(z)))
+        z = F.relu(self.norm3(self.fc3(z)))
 
-        mu = self.fc_pi(z)
+        mu = F.tanh(self.fc_pi(z))
         std = self.log_std.exp().expand_as(mu).to(x.device)
         value = self.fc_v(z)
 
@@ -104,29 +104,50 @@ class ActorCritic(nn.Module):
         dist = Normal(mu, std)
         
         if deterministic:
-            xs = mu
+            y = mu
         else:
-            xs = dist.rsample()
-            
-        y = F.tanh(xs)
-        
+            y = dist.rsample()
+                    
         # Rescale action space with bounded region
-        action = (0.5 + 0.5 * y) * (self.max_values.to(x.device) - self.min_values.to(x.device)) + self.min_values.to(x.device)
+        action = (0.5 + 0.5 * y) * (self.output_max - self.output_min) + self.output_min
 
-        log_probs = dist.log_prob(xs)
+        log_probs = dist.log_prob(y)
         log_probs = log_probs.sum(dim = -1, keepdim=True)
         entropy = dist.entropy().mean()
 
         return action, entropy, log_probs, value
 
     def get_action(self, x:np.ndarray)->np.ndarray:
+        
         x = x.ravel()
-        state = torch.from_numpy(x).unsqueeze(0).float()
+        state = torch.tensor(x, dtype=torch.float32).unsqueeze(0)
         
         with torch.no_grad():
             action, _, _, _ = self.sample(state, True)
             
         return action.squeeze(0).cpu().numpy()
+    
+def compute_gae(
+    rewards: torch.Tensor,
+    values: torch.Tensor,
+    dones: torch.Tensor,
+    next_values: torch.Tensor,
+    gamma: float = 0.99,
+    lam: float = 0.95
+    ):
+
+    T = len(rewards)
+    advantages = torch.zeros_like(rewards)
+    gae = 0
+    
+    for t in reversed(range(T)):
+        next_value = next_values[t]
+        delta = rewards[t] + gamma * next_value * (1 - dones[t]) - values[t]
+        gae = delta + gamma * lam * (1 - dones[t]) * gae
+        advantages[t] = gae
+    
+    returns = advantages + values
+    return advantages, returns
 
 # update policy
 def update_policy(
@@ -135,6 +156,7 @@ def update_policy(
     policy_optimizer : torch.optim.Optimizer,
     criterion :Optional[nn.Module] = None,
     gamma : float = 0.99, 
+    lam:float = 0.95,
     eps_clip : float = 0.1,
     entropy_coeff : float = 0.1,
     value_coeff:float = 0.1,
@@ -154,43 +176,44 @@ def update_policy(
     memory.clear()
     batch = Transition(*zip(*transitions))
     
-    non_final_next_states = torch.cat([s for s in batch.next_state if s is not None]).to(device)
+    next_state_batch = torch.cat(batch.next_state).float().to(device)
     state_batch = torch.cat(batch.state).float().to(device)
     prob_a_batch = torch.cat(batch.prob_a).float().to(device)
-        
-    # Multi-step version reward: Monte Carlo estimate
-    rewards = []
-    discounted_reward = 0
-    for reward in reversed(batch.reward):
-        discounted_reward = reward + (gamma * discounted_reward)
-        rewards.insert(0, discounted_reward)
-        
-    reward_batch = torch.cat(rewards).float().to(device)
+    reward_batch = torch.cat(batch.reward).float().to(device) 
+    done_batch = torch.tensor(batch.done, dtype=torch.float32, device=device)
     
-    # Normalized reward for stable training
-    reward_batch = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-3)
+    with torch.no_grad():        
+        _, _, values = policy_network(state_batch)
+        values = values.squeeze(-1)
+        
+        _, _, next_values = policy_network(next_state_batch)
+        next_values = next_values.squeeze(-1)
+    
+    # GAE
+    advantages, returns = compute_gae(reward_batch, values, done_batch, next_values, gamma, lam)
+    td_target = advantages.unsqueeze(-1)
+    
+    # Normalized At
+    td_target = (td_target - td_target.mean()) / (td_target.std() + 1e-6)
     
     loss_list = []
     
     for _ in range(k_epoch):
         
         policy_optimizer.zero_grad()
-        _, _, _, next_value = policy_network.sample(non_final_next_states)
         _, entropy, log_probs, value = policy_network.sample(state_batch)
-        
-        td_target = reward_batch.view_as(next_value) + gamma * next_value
         
         delta = td_target - value     
         ratio = torch.exp(log_probs - prob_a_batch.detach())
         
         surr1 = ratio * delta
         surr2 = torch.clamp(ratio, 1 - eps_clip, 1 + eps_clip) * delta
-        loss = -torch.min(surr1, surr2) + value_coeff * criterion(value, reward_batch.view_as(value)) - entropy_coeff * entropy
+        loss = -torch.min(surr1, surr2) + value_coeff * criterion(value, returns.view_as(value)) - entropy_coeff * entropy
         loss = loss.mean()
         loss.backward()
         
         # Gradient clipping
-        torch.nn.utils.clip_grad_norm_(policy_network.parameters(), max_norm=1.0)
+        torch.nn.utils.clip_grad_norm_(policy_network.parameters(), max_norm=0.5)
             
         policy_optimizer.step()
         
@@ -208,6 +231,7 @@ def train(
     policy_optimizer : torch.optim.Optimizer,
     criterion :Optional[nn.Module] = None,
     gamma : float = 0.99, 
+    lam:float = 0.95,
     eps_clip : float = 0.1,
     entropy_coeff : float = 0.1,
     value_coeff:float = 0.1,
@@ -249,7 +273,7 @@ def train(
             policy_network.eval()
 
             state = env.get_state().ravel() # state: 2N-array
-            state_tensor = torch.from_numpy(state).unsqueeze(0).float() # state_tensor: (1,2N)
+            state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
 
             with torch.no_grad():
                 action_tensor, _, log_probs, _ = policy_network.sample(state_tensor.to(device))
@@ -264,7 +288,7 @@ def train(
 
             # get new state
             next_state = env.get_state().ravel()
-            next_state_tensor = torch.from_numpy(next_state).unsqueeze(0).float() 
+            next_state_tensor = torch.tensor(next_state, dtype=torch.float32).unsqueeze(0)
 
             # compute cost
             reward = reward_cls.compute_reward(state, action)
@@ -283,6 +307,7 @@ def train(
                     policy_optimizer,
                     criterion,
                     gamma,
+                    lam,
                     eps_clip,
                     entropy_coeff,
                     value_coeff,
@@ -291,7 +316,7 @@ def train(
                 )
 
                 reward_list.append(reward.item())
-                loss_list.append(policy_loss)
+                loss_list.append(policy_loss.item())
 
                 # save the weight parameters
                 torch.save(policy_network.state_dict(), save_last)

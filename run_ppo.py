@@ -60,12 +60,12 @@ def parsing():
     parser.add_argument("--coeff_min", type=float, default= -1.0)
 
     # Network
-    parser.add_argument("--mlp_dim", type = int, default = 64)
+    parser.add_argument("--mlp_dim", type = int, default = 32)
     parser.add_argument("--r", type =float, default = 0.995)
     parser.add_argument("--std", type = float, default = 0.5)
     parser.add_argument("--capacity", type=int, default= 8)
     parser.add_argument("--eps_clip", type=float, default=0.25)
-    parser.add_argument("--entropy_coeff", type=float, default=0.10)
+    parser.add_argument("--entropy_coeff", type=float, default=0.01)
     parser.add_argument("--value_coeff", type=float, default=0.20)
     parser.add_argument("--num_episode", type=int, default=200)
     parser.add_argument("--verbose", type=int, default=10)
@@ -74,7 +74,7 @@ def parsing():
 
     # Cost parameters
     parser.add_argument("--alpha",type=float, default=0.10)
-    parser.add_argument("--beta", type=float, default=0.02)
+    parser.add_argument("--beta", type=float, default=0.10)
     parser.add_argument("--save_last", type=str, default="ppo_last.pt")
     parser.add_argument("--save_best", type=str, default="ppo_best.pt")
 
@@ -160,7 +160,7 @@ if __name__ == "__main__":
     network = ActorCritic(input_dim, args['mlp_dim'], n_actions, args['std'], output_min = args['coeff_min'], output_max = args['coeff_max'])
     network.to(device)
 
-    optimizer = torch.optim.RMSprop(network.parameters(), lr = args['lr'])
+    optimizer = torch.optim.Adam(network.parameters(), lr = args['lr'])
 
     # maximum simulation time (integer)
     Nt = int(np.ceil((args['t_max'] - args['t_min']) / args['dt']))
@@ -178,6 +178,7 @@ if __name__ == "__main__":
             optimizer, 
             None, 
             args['r'], 
+            0.95,
             args['eps_clip'], 
             args['entropy_coeff'],
             args['value_coeff'],

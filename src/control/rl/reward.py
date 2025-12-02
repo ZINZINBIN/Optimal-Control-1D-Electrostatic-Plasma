@@ -13,6 +13,7 @@ class Reward:
         n0:float = 1.0, 
         alpha:float = 1.0,
         beta:float = 1.0,
+        n_actions:int = 10,
         ):
         self.feq = estimate_f(init_state, N_mesh, L, vmin, vmax, n0)
         self.init_state = init_state
@@ -21,10 +22,14 @@ class Reward:
         self.vmin = vmin
         self.vmax = vmax
         self.n0 = n0
+        self.n_actions = n_actions
         
         # Multiplier
         self.alpha = alpha
         self.beta = beta
+        
+        self.r_pe_n = self.compute_electric_energy(self.init_state, None)
+        self.r_ie_n = self.compute_input_energy(np.array([1.0 for _ in range(n_actions)]))
 
     def update_params(self, **kwargs):
         for key in kwargs.keys():
@@ -63,8 +68,8 @@ class Reward:
         return np.tanh(1 - np.sqrt(self.compute_input_energy(action) / 50.0))
     
     def compute_reward(self, state:np.ndarray, E_external:Optional[np.ndarray] = None):
-        r_pe = self.compute_electric_energy(state)
-        r_ie = self.compute_input_energy(E_external)
+        r_pe = self.compute_electric_energy(state) / self.r_pe_n
+        r_ie = self.compute_input_energy(E_external) / self.r_ie_n
 
-        reward = r_pe * self.alpha + r_ie * self.beta
+        reward = (-1) * abs(r_pe) * self.alpha + (-1) * abs(r_ie) * self.beta
         return reward

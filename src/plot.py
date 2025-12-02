@@ -754,7 +754,6 @@ def plot_loss_curve(
     
     ax.set_xlabel(r"Episode")
     ax.set_ylabel("Loss")
-    ax.set_yscale("log")
     ax.legend()
     ax.grid(True)
 

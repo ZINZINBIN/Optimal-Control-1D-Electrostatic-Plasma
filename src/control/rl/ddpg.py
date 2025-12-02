@@ -40,14 +40,14 @@ class ReplayBuffer(object):
 
 # Function for initialization
 def hidden_init(layer: torch.nn.Linear):
-    fan_in = layer.weight.data.size()[1]
+    fan_in = layer.weight.data.size()[0]
     lim = 1.0 / np.sqrt(fan_in)
     return (-lim, lim)
 
 # Soft update for parameters: xf = t*xi + (1-t)*xf
 def soft_update(target: nn.Module, source: nn.Module, tau: float):
-    for target_param, param in zip(target.parameters(), source.parameters()):
-        target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
+    for target_param, source_param in zip(target.parameters(), source.parameters()):
+        target_param.data.copy_(target_param.data * (1.0 - tau) + source_param.data * tau)
 
 class Actor(nn.Module):
     def __init__(
@@ -77,7 +77,7 @@ class Actor(nn.Module):
         self.v_norm = v_norm
 
         self.fc1 = nn.Linear(input_dim, mlp_dim)
-        self.norm1 = nn.LayerNorm(input_dim)
+        self.norm1 = nn.LayerNorm(mlp_dim)
 
         self.fc2 = nn.Linear(mlp_dim, mlp_dim)
         self.norm2 = nn.LayerNorm(mlp_dim)
@@ -95,17 +95,18 @@ class Actor(nn.Module):
         self.fc2.weight.data.uniform_(*hidden_init(self.fc2))
         self.fc3.weight.data.uniform_(*hidden_init(self.fc3))
 
-        self.fc_out.weight.data.uniform_(*hidden_init(self.fc_out))
+        self.fc_out.weight.data.uniform_(-3e-3, 3e-3)
 
     def forward(self, x:torch.Tensor)->torch.Tensor:
     
         x_pos = x[:,:self.input_dim//2] / self.x_norm
         x_vel = x[:,self.input_dim//2:] / self.v_norm
         
-        z = torch.cat([x_pos, x_vel], dim=1)
-        z = F.relu(self.fc1(self.norm1(z)))
-        z = F.relu(self.fc2(self.norm2(z)))
-        z = F.relu(self.fc3(self.norm3(z)))
+        z = torch.cat([x_pos, x_vel], dim=1)       
+        z = F.relu(self.norm1(self.fc1(z)))
+        z = F.relu(self.norm2(self.fc2(z)))
+        z = F.relu(self.norm3(self.fc3(z)))
+        
         mu = F.tanh(self.fc_out(z))
         
         return mu
@@ -114,13 +115,13 @@ class Actor(nn.Module):
         mu = self.forward(x)
      
         # Rescale action space with bounded region
-        action = (0.5 + 0.5 * mu) * (self.max_values.to(x.device) - self.min_values.to(x.device)) + self.min_values.to(x.device)
+        action = (0.5 + 0.5 * mu) * (self.output_max - self.output_min) + self.output_min
 
         return action
 
     def get_action(self, x:np.ndarray, device:str)->np.ndarray:
         x = x.ravel()
-        state = torch.from_numpy(x).unsqueeze(0).float().to(device)
+        state = torch.tensor(x, dtype=torch.float32).unsqueeze(0).to(device)
         
         with torch.no_grad():
             action = self.sample(state)
@@ -145,7 +146,7 @@ class Critic(nn.Module):
         self.v_norm = v_norm
 
         self.fc1 = nn.Linear(input_dim + n_actions, mlp_dim)
-        self.norm1 = nn.LayerNorm(input_dim + n_actions)
+        self.norm1 = nn.LayerNorm(mlp_dim)
 
         self.fc2 = nn.Linear(mlp_dim, mlp_dim)
         self.norm2 = nn.LayerNorm(mlp_dim)
@@ -163,7 +164,7 @@ class Critic(nn.Module):
         self.fc2.weight.data.uniform_(*hidden_init(self.fc2))
         self.fc3.weight.data.uniform_(*hidden_init(self.fc3))
 
-        self.fc_out.weight.data.uniform_(*hidden_init(self.fc_out))
+        self.fc_out.weight.data.uniform_(-3e-3, 3e-3)
 
     def forward(self, x: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
         # Normalize
@@ -171,9 +172,9 @@ class Critic(nn.Module):
         x_vel = x[:,self.input_dim//2:] / self.v_norm
         
         z = torch.cat([x_pos, x_vel, a], dim=1)
-        z = F.relu(self.fc1(self.norm1(z)))
-        z = F.relu(self.fc2(self.norm2(z)))
-        z = F.relu(self.fc3(self.norm3(z)))
+        z = F.relu(self.norm1(self.fc1(z)))
+        z = F.relu(self.norm2(self.fc2(z)))
+        z = F.relu(self.norm3(self.fc3(z)))
         q = self.fc_out(z)
         return q
 
@@ -235,19 +236,15 @@ def update_policy(
     # Parsing state, action, reward, done, and next state
     state_batch = torch.cat(batch.state).float().to(device)
     action_batch = torch.cat(batch.action).float().to(device)
-    reward_batch = torch.cat(batch.reward).float().to(device)   
-    
-    # Normalize reward
-    reward_batch = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-3)
-    
+    reward_batch = torch.cat(batch.reward).float().to(device)       
     done_batch = torch.tensor(batch.done, dtype=torch.float32, device=device).unsqueeze(1)  
-
-    non_final_next_states = torch.cat([s for s in batch.next_state if s is not None]).to(device)
-    non_final_mask = torch.tensor(tuple(map(lambda s : s is not None, batch.next_state)), device = device, dtype = torch.bool)
-
+    next_states_batch = torch.cat(batch.next_state).float().to(device)
+    
+    # reward_batch = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-8)
+    
     with torch.no_grad():
-        next_action = target_p_network.sample(non_final_next_states)
-        target_q = target_q_network(non_final_next_states, next_action)
+        next_action = target_p_network.sample(next_states_batch)
+        target_q = target_q_network(next_states_batch, next_action)
         target_q = reward_batch.unsqueeze(1) + gamma * (1 - done_batch) * target_q
 
     # Update Q network
@@ -257,21 +254,19 @@ def update_policy(
     q_optimizer.zero_grad()
     q_loss.backward()
 
-    torch.nn.utils.clip_grad_norm_(q_network.parameters(), max_norm=1.0)
+    torch.nn.utils.clip_grad_norm_(q_network.parameters(), max_norm=0.5)
 
     q_optimizer.step()
 
     # Update policy network
     action_batch_sampled = p_network.sample(state_batch)
-    
-    q_network.eval()
     p_loss = (-1) * q_network(state_batch, action_batch_sampled).mean()
-        
+    
     p_optimizer.zero_grad()
     p_loss.backward()
 
     # Gradient clipping
-    torch.nn.utils.clip_grad_norm_(p_network.parameters(), max_norm=1.0)
+    torch.nn.utils.clip_grad_norm_(p_network.parameters(), max_norm=0.5)
 
     p_optimizer.step()
 
@@ -298,6 +293,7 @@ def train(
     gamma: float = 0.99,
     device: Optional[str] = "cpu",
     num_episode: int = 10000,
+    update_freq:int = 8,
     Nt: int = 1000,
     verbose: int = 8,
     save_last: Optional[str] = None,
@@ -311,7 +307,7 @@ def train(
 ):
 
     # minimum buffer size to start training
-    min_buffer_size = 10000
+    min_buffer_size = 1000
 
     if device is None:
         device = "cpu"
@@ -346,25 +342,30 @@ def train(
             p_network.eval()
 
             state = env.get_state().ravel() # state: 2N-array
-            state_tensor = torch.from_numpy(state).unsqueeze(0).float() # state_tensor: (1,2N)
+            state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
 
             with torch.no_grad():
-                action_tensor = p_network.sample(state_tensor.to(device))
-                action = action_tensor.squeeze(0).cpu().numpy()
+                action_tensor = p_network.sample(state_tensor.to(device)).cpu()
+                action = action_tensor.detach().squeeze(0).cpu().numpy()
 
             # Add exploration noise
             noise = ou_noise.sample() * noise_scale
             action = np.clip(action + noise, p_network.output_min, p_network.output_max)
+            action_tensor = torch.tensor(action, dtype=torch.float32).unsqueeze(0)
 
             # update actuator
+            # Method 01. Sine and Cos input
             actuator.update_E(coeff_cos = action[:p_network.n_actions//2], coeff_sin = action[p_network.n_actions//2:])
+            
+            # Method 02. Sine input only
+            # actuator.update_E(coeff_cos = None, coeff_sin = action)
 
             # update state
             env.update_state(E_external=actuator.compute_E())
 
             # get new state
             next_state = env.get_state().ravel()
-            next_state_tensor = torch.from_numpy(next_state).unsqueeze(0).float() 
+            next_state_tensor = torch.tensor(next_state, dtype=torch.float32).unsqueeze(0)
 
             # compute cost
             reward = reward_cls.compute_reward(state, action)           
@@ -372,10 +373,16 @@ def train(
 
             # save trajectory into memory
             done = False if idx_t < Nt - 1 else True
-            memory.push(state_tensor, action_tensor, next_state_tensor, reward_tensor, done)
+            memory.push(
+                state_tensor, 
+                action_tensor, 
+                next_state_tensor, 
+                reward_tensor, 
+                done
+            )
 
             # update policy
-            if memory.__len__() >= min_buffer_size:
+            if memory.__len__() >= min_buffer_size and idx_t % update_freq == 0:
 
                 q_loss, p_loss = update_policy(
                     memory,
@@ -403,7 +410,7 @@ def train(
                 print("| episode:{} | simulation terminated with progress: {:.1f} percent".format(i_episode+1, 100 * (idx_t + 1)/Nt))
                 break
 
-        if i_episode % verbose == 0 and memory.__len__() >= min_buffer_size:
+        if i_episode % verbose == 0 and len(q_loss_list) > 0:
             print("| episode:{} | p loss:{:.4f} | q loss:{:.4f} | reward:{:.4f}".format(i_episode+1, p_loss_list[-1], q_loss_list[-1], reward))
 
         if len(q_loss_list) > 0:
