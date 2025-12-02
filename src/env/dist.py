@@ -123,8 +123,8 @@ class BumpOnTail(BasicDistribution):
         state = self.rejection_sampling(n_samples)
         self.x_init = state[:, 0]
         self.v_init = state[:, 1]
-        self.high_indx = self.inject_high_electron_indice(self.v_init)
-        
+        self.high_indx = self.inject_high_electron_indice()
+
     def reinit(self):
         self.initialize(self.n_samples)
 
@@ -144,25 +144,40 @@ class BumpOnTail(BasicDistribution):
         prob = np.exp(-abs(v))
         return prob
 
-    def get_target_prob(self, x:float, v:float):
-        prob = (
-            1 / (1 + self.a) * 1 / np.sqrt(2 * np.pi) * np.exp(-0.5 * v**2)
-            + self.a / (1 + self.a) * 1 / np.sqrt(2 * np.pi) / self.sigma * np.exp(-0.5 * (v-self.v0)**2 / self.sigma ** 2)
-        ) 
+    def get_target_prob(self, v: float, vb: float, sigma: float):
+        prob = 1 / np.sqrt(2 * np.pi) / sigma * np.exp(-0.5 * (v - vb) ** 2 / sigma**2)
         return prob
 
     def rejection_sampling(self, n_samples: int, batch:int = 1000):
         pos = []
         vel = []
 
+        r1 = 1 / (1 + self.a)
+        r2 = self.a / (1 + self.a)
+        N1 = int(n_samples * r1)
+        N2 = n_samples - N1
+
+        # Background thermalized electron distribution
+        while len(pos) < N1:
+
+            x = np.random.uniform(0, self.L, size=batch)
+            v = np.random.uniform(-10, 10, size=batch)
+            u = np.random.uniform(0, 1.0, size=batch)
+
+            pos += x[u < self.get_target_prob(v, 0.0, 1.0)].tolist()
+            vel += v[u < self.get_target_prob(v, 0.0, 1.0)].tolist()
+
+        pos = pos[:N1]
+        vel = vel[:N1]
+
         while len(pos) < n_samples:
 
-            x = np.random.uniform(0, self.L, size = batch)
-            v = np.random.uniform(-10, 10, size = batch)
-            u = np.random.uniform(0, 1.0, size = batch)
+            x = np.random.uniform(0, self.L, size=batch)
+            v = np.random.uniform(-10, 10, size=batch)
+            u = np.random.uniform(0, 1.0, size=batch)
 
-            pos += x[u < self.get_target_prob(x, v)].tolist()
-            vel += v[u < self.get_target_prob(x, v)].tolist()
+            pos += x[u < self.get_target_prob(v, self.v0, self.sigma)].tolist()
+            vel += v[u < self.get_target_prob(v, self.v0, self.sigma)].tolist()
 
         pos = np.array(pos[:n_samples])
         vel = np.array(vel[:n_samples])
@@ -173,6 +188,8 @@ class BumpOnTail(BasicDistribution):
 
         return samples
 
-    def inject_high_electron_indice(self, v:np.ndarray):
-        indice = np.where(v > self.v0 - 2.5 * self.sigma)[0]
+    def inject_high_electron_indice(self):
+        r1 = 1 / (1 + self.a)
+        N1 = int(self.n_samples * r1)
+        indice = np.array([i for i in range(N1, self.n_samples)])
         return indice

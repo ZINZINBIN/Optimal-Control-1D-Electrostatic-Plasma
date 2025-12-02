@@ -26,6 +26,7 @@ def parsing():
     parser.add_argument("--gamma", type=float, default=5.0)
     parser.add_argument("--save_plot", type=str, default="./result/")
     parser.add_argument("--save_file", type=str, default="./dataset/")
+    parser.add_argument("--is_save", type=bool, default=False)
     parser.add_argument("--tag", type=str, default="sac-control")
 
     # PIC parameters (default)
@@ -210,7 +211,8 @@ if __name__ == "__main__":
         }
 
         # save data
-        savemat(file_name = os.path.join(filepath, "process.mat"), mdict=mdic, do_compression=True)
+        if args['is_save']:
+            savemat(file_name = os.path.join(filepath, "process.mat"), mdict=mdic, do_compression=True)
 
     # Trajectory of the system's state
     pos_list = []
@@ -304,8 +306,9 @@ if __name__ == "__main__":
     }
 
     # save data
-    savemat(file_name = os.path.join(filepath, "data.mat"), mdict=mdic, do_compression=True)
-    
+    if args['is_save']:
+        savemat(file_name = os.path.join(filepath, "data.mat"), mdict=mdic, do_compression=True)
+
     # Plot cost function
     cost = {
         r"$J_{KL}$":cost_kl_list,

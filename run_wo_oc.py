@@ -26,6 +26,7 @@ def parsing():
     parser.add_argument("--gamma", type=float, default=5.0)
     parser.add_argument("--save_file", type=str, default="./dataset/")
     parser.add_argument("--save_plot", type=str, default="./result/")
+    parser.add_argument("--is_save", type=bool, default=False)
 
     # PIC parameters (default)
     parser.add_argument("--num_particle", type = int, default = 5000)  
@@ -50,7 +51,7 @@ def parsing():
 
     # Distribution parameters (Bump-on-tail)
     parser.add_argument("--a", type = float, default = 0.2)   
-    
+
     args = vars(parser.parse_args())
     return args
 
@@ -149,7 +150,8 @@ if __name__ == "__main__":
     }
 
     # save data
-    savemat(file_name = os.path.join(filepath, "data.mat"), mdict=mdic, do_compression=True)
+    if args['is_save']:
+        savemat(file_name = os.path.join(filepath, "data.mat"), mdict=mdic, do_compression=True)
 
     # Plot cost function
     cost = {
@@ -179,4 +181,5 @@ if __name__ == "__main__":
         plot_two_stream_evolution(snapshot, savepath, "phase_space_evolution.pdf", 0, args['L'], -10.0, 10.0)
 
     elif args['simcase'] == "bump-on-tail":
-        plot_bump_on_tail_evolution(snapshot, savepath, "phase_space_evolution.pdf", 0, args['L'], -10.0, 10.0)
+        h_idx = sim.init_dist.high_indx
+        plot_bump_on_tail_evolution(snapshot, savepath, "phase_space_evolution.pdf", 0, args['L'], -10.0, 10.0, h_idx)

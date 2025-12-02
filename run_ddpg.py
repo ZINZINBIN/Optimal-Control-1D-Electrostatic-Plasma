@@ -29,6 +29,7 @@ def parsing():
     parser.add_argument("--gamma", type=float, default=5.0)
     parser.add_argument("--save_plot", type=str, default="./result/")
     parser.add_argument("--save_file", type=str, default="./dataset/")
+    parser.add_argument("--is_save", type=bool, default=False)
 
     # PIC parameters (default)
     parser.add_argument("--num_particle", type = int, default = 5000)  
@@ -218,8 +219,9 @@ if __name__ == "__main__":
         }
 
         # save data
-        savemat(file_name = os.path.join(filepath, "process.mat"), mdict=mdic, do_compression=True)
-        
+        if args['is_save']:
+            savemat(file_name = os.path.join(filepath, "process.mat"), mdict=mdic, do_compression=True)
+
         # plot the loss curve
         plot_loss_curve(q_loss, p_loss, savepath, "loss.pdf")
 
@@ -255,10 +257,10 @@ if __name__ == "__main__":
         # Update coefficients
         state = sim.get_state()
         coeffs = p_network.get_action(state, "cpu")
-        
+
         # Method 01. Sine and cos input
         actuator.update_E(coeffs[:args['max_mode']], coeffs[args['max_mode']:])
-        
+
         # Method 02. Sine input only
         # actuator.update_E(None, coeffs)
 
@@ -295,12 +297,12 @@ if __name__ == "__main__":
 
     E = np.array(E_list)
     PE = np.array(PE_list)
-    
+
     if len(coeff_cos) > 0:
         coeff_cos = np.concatenate(coeff_cos, axis = 1)
     else:
         coeff_cos = 0
-    
+
     if len(coeff_sin) > 0:
         coeff_sin = np.concatenate(coeff_sin, axis = 1)
     else: 
@@ -327,7 +329,8 @@ if __name__ == "__main__":
     }
 
     # save data
-    savemat(file_name = os.path.join(filepath, "data.mat"), mdict=mdic, do_compression=True)
+    if args['is_save']:
+        savemat(file_name = os.path.join(filepath, "data.mat"), mdict=mdic, do_compression=True)
 
     # Plot cost function
     cost = {
@@ -343,7 +346,8 @@ if __name__ == "__main__":
         plot_two_stream_evolution(snapshot, savepath, "phase_space_evolution.pdf", 0, args['L'], -10.0, 10.0)
 
     elif args['simcase'] == "bump-on-tail":
-        plot_bump_on_tail_evolution(snapshot, savepath, "phase_space_evolution.pdf", 0, args['L'], -10.0, 10.0)
+        h_idx = sim.init_dist.high_indx
+        plot_bump_on_tail_evolution(snapshot, savepath, "phase_space_evolution.pdf", 0, args['L'], -10.0, 10.0, h_idx)
 
     # Electric energy
     plot_log_E(args['t_max'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], snapshot, savepath, "log_E.pdf")
@@ -356,10 +360,10 @@ if __name__ == "__main__":
 
     # Amplitude of each external E field over time
     plot_E_k_external_over_time(args['t_max'], coeff_cos, coeff_sin, savepath, "Ek_t_external.pdf")
-    
+
     # Distribution in a phase-space
     # f(x)
     plot_x_dist_evolution(snapshot, savepath, "x_dist.pdf", 0, args['L'], args['num_mesh'])
-    
+
     # f(v)
     plot_v_dist_evolution(snapshot, savepath, "v_dist.pdf", -10.0, 10.0, args['num_mesh'])

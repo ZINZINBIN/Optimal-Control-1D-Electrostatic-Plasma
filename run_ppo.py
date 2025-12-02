@@ -29,6 +29,7 @@ def parsing():
     parser.add_argument("--gamma", type=float, default=5.0)
     parser.add_argument("--save_plot", type=str, default="./result/")
     parser.add_argument("--save_file", type=str, default="./dataset/")
+    parser.add_argument("--is_save", type=bool, default=False)
 
     # PIC parameters (default)
     parser.add_argument("--num_particle", type = int, default = 5000)  
@@ -109,13 +110,13 @@ if __name__ == "__main__":
 
     savepath = os.path.join(args["save_plot"], args['simcase'], "ppo-control")
     filepath = os.path.join(args['save_file'], args['simcase'], "ppo-control")
-    
+
     # Information
     print("=============== Information ================")
     print("Simulation : {}".format(args['simcase']))
     print("RL algorithm : PPO")
     print("Input mode number : {}".format(args['max_mode']))
-    
+
     # device allocation
     if(torch.cuda.device_count() >= 1):
         device = "cuda"
@@ -167,9 +168,9 @@ if __name__ == "__main__":
 
     # Optimize controller
     memory = ReplayBuffer(args['capacity'])
-    
+
     if args['optimize']:
-        
+
         reward, loss = train(
             sim, 
             actuator, 
@@ -192,7 +193,7 @@ if __name__ == "__main__":
             args["beta"],
             args['k_epoch']
         )
-        
+
         # save optimization process
         mdic = {
             'reward':reward,
@@ -200,8 +201,9 @@ if __name__ == "__main__":
         }
 
         # save data
-        savemat(file_name = os.path.join(filepath, "process.mat"), mdict=mdic, do_compression=True)
-        
+        if args['is_save']:
+            savemat(file_name = os.path.join(filepath, "process.mat"), mdict=mdic, do_compression=True)
+
         plot_loss_curve(None, loss, savepath, "loss.pdf")
 
     # Trajectory of the system's state
@@ -213,26 +215,26 @@ if __name__ == "__main__":
     # Trajectory of the input control
     coeff_cos = []
     coeff_sin = []
-    
+
     # initialize the simulation
     sim.reinit()
-    
+
     # load best model
     network.load_state_dict(torch.load(os.path.join(filepath, args['save_best'])))
     network.cpu()
-    
+
     # no gradient
     network.eval()
-    
+
     # Compute the cost function
     reward = Reward(sim.init_dist.get_init_state(), args['num_mesh'], args['L'], -25.0, 25.0, args['n0'], args['alpha'], args['beta'])
-    
+
     cost_kl_list = []
     cost_ee_list = []
     cost_ie_list = []
-     
+
     for idx_t in tqdm(range(Nt), "PIC simulation with E-field control"):
-        
+
         # Update coefficients
         state = sim.get_state()
         coeffs = network.get_action(state)
@@ -240,10 +242,10 @@ if __name__ == "__main__":
 
         # Get action
         E_external = actuator.compute_E()
-        
+
         # Update motion
         sim.update_state(E_external)       
-        
+
         # save current state
         E = sim.get_energy()
         PE = sim.get_electric_energy()
@@ -255,12 +257,12 @@ if __name__ == "__main__":
 
         coeff_cos.append(actuator.coeff_cos.copy())
         coeff_sin.append(actuator.coeff_sin.copy())
-        
+
         # Compute code
         cost_kl = reward.compute_kl_divergence(sim.get_state())
         cost_ee = reward.compute_electric_energy(sim.get_state())
         cost_ie = reward.compute_input_energy(coeffs)
-        
+
         cost_kl_list.append(cost_kl)
         cost_ee_list.append(cost_ee)
         cost_ie_list.append(cost_ie)
@@ -296,39 +298,41 @@ if __name__ == "__main__":
     }
 
     # save data
-    savemat(file_name = os.path.join(filepath, "data.mat"), mdict=mdic, do_compression=True)
-    
+    if args['is_save']:
+        savemat(file_name = os.path.join(filepath, "data.mat"), mdict=mdic, do_compression=True)
+
     # Plot cost function
     cost = {
         r"$J_{KL}$":cost_kl_list,
         r"$J_{ee}$":cost_ee_list,
         r"$J_{ie}$":cost_ie_list,
     }
-    
+
     plot_cost_over_time(args['t_max'], Nt, cost, savepath, "cost.pdf")
-    
+
     # Plot the result
     if args['simcase'] == "two-stream":
         plot_two_stream_evolution(snapshot, savepath, "phase_space_evolution.pdf", 0, args['L'], -10.0, 10.0)
-        
+
     elif args['simcase'] == "bump-on-tail":
-        plot_bump_on_tail_evolution(snapshot, savepath, "phase_space_evolution.pdf", 0, args['L'], -10.0, 10.0)
-    
+        h_idx = sim.init_dist.high_indx
+        plot_bump_on_tail_evolution(snapshot, savepath, "phase_space_evolution.pdf", 0, args['L'], -10.0, 10.0, h_idx)
+
     # Electric energy
     plot_log_E(args['t_max'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], snapshot, savepath, "log_E.pdf")
-    
+
     # Electric field spectrum
     plot_E_k_spectrum(args['t_max'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], snapshot, savepath, "E_k_spectrum.pdf")
-    
+
     # Fourier coefficient over time
     plot_E_k_over_time(args['t_max'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], args['max_mode'], snapshot, savepath, "Ek_t.pdf")
 
     # Amplitude of each external E field over time
     plot_E_k_external_over_time(args['t_max'], coeff_cos, coeff_sin, savepath, "Ek_t_external.pdf")
-    
+
     # Distribution in a phase-space
     # f(x)
     plot_x_dist_evolution(snapshot, savepath, "x_dist.pdf", 0, args['L'], args['num_mesh'])
-    
+
     # f(v)
     plot_v_dist_evolution(snapshot, savepath, "v_dist.pdf", -10.0, 10.0, args['num_mesh'])

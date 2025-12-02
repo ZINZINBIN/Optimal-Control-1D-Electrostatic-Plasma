@@ -98,6 +98,7 @@ class Actor(nn.Module):
         self.fc_out.weight.data.uniform_(-3e-3, 3e-3)
 
     def forward(self, x:torch.Tensor)->torch.Tensor:
+        
     
         x_pos = x[:,:self.input_dim//2] / self.x_norm
         x_vel = x[:,self.input_dim//2:] / self.v_norm
@@ -240,6 +241,7 @@ def update_policy(
     done_batch = torch.tensor(batch.done, dtype=torch.float32, device=device).unsqueeze(1)  
     next_states_batch = torch.cat(batch.next_state).float().to(device)
     
+    # Normalize reward
     # reward_batch = (reward_batch - reward_batch.mean()) / (reward_batch.std() + 1e-8)
     
     with torch.no_grad():
