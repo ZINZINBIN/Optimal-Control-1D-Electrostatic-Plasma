@@ -56,7 +56,7 @@ def parsing():
     parser.add_argument("--a", type = float, default = 0.2)   
 
     # Controller
-    parser.add_argument("--max_mode", type = int, default = 5)
+    parser.add_argument("--max_mode", type = int, default = 3)
     parser.add_argument("--coeff_max", type=float, default= 1.0)
     parser.add_argument("--coeff_min", type=float, default= -1.0)
 
@@ -75,7 +75,7 @@ def parsing():
 
     # Cost parameters
     parser.add_argument("--alpha",type=float, default=0.10)
-    parser.add_argument("--beta", type=float, default=0.10)
+    parser.add_argument("--beta", type=float, default=0.00)
     parser.add_argument("--save_last", type=str, default="ppo_last.pt")
     parser.add_argument("--save_best", type=str, default="ppo_best.pt")
 
@@ -204,7 +204,16 @@ if __name__ == "__main__":
         if args['is_save']:
             savemat(file_name = os.path.join(filepath, "process.mat"), mdict=mdic, do_compression=True)
 
-        plot_loss_curve(None, loss, savepath, "loss.pdf")
+        plot_loss_curve(
+            {
+                "p-loss": loss,
+            },
+            savepath,
+            "loss.pdf",
+        )
+
+    else:
+        device = "cpu"
 
     # Trajectory of the system's state
     pos_list = []
@@ -220,7 +229,7 @@ if __name__ == "__main__":
     sim.reinit()
 
     # load best model
-    network.load_state_dict(torch.load(os.path.join(filepath, args['save_best'])))
+    network.load_state_dict(torch.load(os.path.join(filepath, args['save_best']), map_location = device))
     network.cpu()
 
     # no gradient
@@ -238,7 +247,12 @@ if __name__ == "__main__":
         # Update coefficients
         state = sim.get_state()
         coeffs = network.get_action(state)
-        actuator.update_E(coeffs[:args['max_mode']], coeffs[args['max_mode']:])
+
+        # Method 01. Sine and cos input
+        actuator.update_E(coeffs[: args["max_mode"]], coeffs[args["max_mode"] :])
+
+        # Method 02. Sine input only
+        # actuator.update_E(None, coeffs)
 
         # Get action
         E_external = actuator.compute_E()
@@ -325,7 +339,7 @@ if __name__ == "__main__":
     plot_E_k_spectrum(args['t_max'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], snapshot, savepath, "E_k_spectrum.pdf")
 
     # Fourier coefficient over time
-    plot_E_k_over_time(args['t_max'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], args['max_mode'], snapshot, savepath, "Ek_t.pdf")
+    plot_E_k_over_time(args['t_max'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], 5, snapshot, savepath, "Ek_t.pdf")
 
     # Amplitude of each external E field over time
     plot_E_k_external_over_time(args['t_max'], coeff_cos, coeff_sin, savepath, "Ek_t_external.pdf")

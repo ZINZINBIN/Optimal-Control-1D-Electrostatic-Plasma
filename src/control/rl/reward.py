@@ -23,12 +23,13 @@ class Reward:
         self.vmax = vmax
         self.n0 = n0
         self.n_actions = n_actions
-        
+
         # Multiplier
         self.alpha = alpha
         self.beta = beta
-        
-        self.r_pe_n = self.compute_electric_energy(self.init_state, None)
+
+        # self.r_pe_n = self.compute_electric_energy(self.init_state, None)
+        self.r_pe_n = 1.0
         self.r_ie_n = self.compute_input_energy(np.array([1.0 for _ in range(n_actions)]))
 
     def update_params(self, **kwargs):
@@ -47,29 +48,29 @@ class Reward:
     def compute_electric_energy(self, state:np.ndarray, E_external:Optional[np.ndarray] = None):
         PE = estimate_electric_energy(state.reshape(-1,1), E_external, self.N_mesh, self.L, self.n0)
         return PE
-    
+
     def compute_input_energy(self, actions:np.ndarray):
         PE = np.sum(actions ** 2) * self.L * 0.25
         return PE
-    
+
     def compute_cost(self, state:np.ndarray, action:np.ndarray):
         r_kl = self.compute_kl_divergence(state)
         r_pe = self.compute_electric_energy(state)
         r_ie = self.compute_input_energy(action)
         return r_kl, r_pe, r_ie
-    
+
     def compute_reward_kl_divergence(self, state:np.ndarray):
         return np.tanh(1 - np.sqrt(self.compute_kl_divergence(state) / 25))
-    
+
     def compute_reward_electric_energy(self, state:np.ndarray, E_external:Optional[np.ndarray] = None):
         return np.tanh(1 - np.sqrt(self.compute_electric_energy(state, E_external) / 10.0))
-    
+
     def compute_reward_input_energy(self, action:np.ndarray):
         return np.tanh(1 - np.sqrt(self.compute_input_energy(action) / 50.0))
-    
-    def compute_reward(self, state:np.ndarray, E_external:Optional[np.ndarray] = None):
-        r_pe = self.compute_electric_energy(state) / self.r_pe_n
-        r_ie = self.compute_input_energy(E_external) / self.r_ie_n
 
-        reward = (-1) * abs(r_pe) * self.alpha + (-1) * abs(r_ie) * self.beta
+    def compute_reward(self, state:np.ndarray, E_external:Optional[np.ndarray] = None):
+        r_pe = max(1.0 - self.compute_electric_energy(state) / self.r_pe_n, 0)
+        r_ie = max(1.0 - self.compute_input_energy(E_external) / self.r_ie_n, 0)
+
+        reward = r_pe * self.alpha + r_ie * self.beta
         return reward

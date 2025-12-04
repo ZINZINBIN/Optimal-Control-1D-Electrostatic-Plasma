@@ -36,7 +36,7 @@ def parsing():
     parser.add_argument("--num_mesh", type = int, default = 250)        
     parser.add_argument("--t_min", type = float, default = 0)
     parser.add_argument("--t_max", type = float, default = 50)
-    parser.add_argument("--dt", type = float, default = 0.05)          
+    parser.add_argument("--dt", type = float, default = 0.1)          
 
     # Physical length scale and initial density
     parser.add_argument("--L", type = float, default = 50)
@@ -57,27 +57,27 @@ def parsing():
 
     # Controller
     parser.add_argument("--max_mode", type = int, default = 3)
-    parser.add_argument("--coeff_max", type=float, default= 1.0)
-    parser.add_argument("--coeff_min", type=float, default= -1.0)
+    parser.add_argument("--coeff_max", type=float, default= 1.25)
+    parser.add_argument("--coeff_min", type=float, default= -1.25)
 
     # Network
     parser.add_argument("--update_freq", type=int, default=10)
-    parser.add_argument("--mlp_dim", type=int, default=32)
+    parser.add_argument("--mlp_dim", type=int, default=64)
     parser.add_argument("--r", type=float, default=0.995)
-    parser.add_argument("--tau", type=float, default=0.05)
-    parser.add_argument("--capacity", type=int, default=10000)
+    parser.add_argument("--tau", type=float, default=0.005)
+    parser.add_argument("--capacity", type=int, default=100000)
     parser.add_argument("--batch_size", type=int, default=100)
     parser.add_argument("--num_episode", type=int, default=500)
     parser.add_argument("--verbose", type=int, default=10)
     parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--noise_scale", type=float, default=0.2)
+    parser.add_argument("--noise_scale", type=float, default=0.1)
     parser.add_argument("--mu", type=float, default=0.0)
-    parser.add_argument("--theta", type=float, default=0.1)
-    parser.add_argument("--sigma", type=float, default=0.1)
+    parser.add_argument("--theta", type=float, default=0.15)
+    parser.add_argument("--sigma", type=float, default=0.20)
 
     # Cost parameters
-    parser.add_argument("--alpha",type=float, default=0.10)
-    parser.add_argument("--beta", type=float, default=0.10)
+    parser.add_argument("--alpha",type=float, default=0.100)
+    parser.add_argument("--beta", type=float, default=0.100)
     parser.add_argument("--save_last", type=str, default="ddpg_last.pt")
     parser.add_argument("--save_best", type=str, default="ddpg_best.pt")
 
@@ -161,17 +161,22 @@ if __name__ == "__main__":
     input_dim = args['num_particle'] * 2
     n_actions = args['max_mode'] * 2
 
-    q_network = Critic(input_dim, args["mlp_dim"], n_actions)
+    q1_network = Critic(input_dim, args["mlp_dim"], n_actions)
+    q2_network = Critic(input_dim, args["mlp_dim"], n_actions)
     p_network = Actor(input_dim, args["mlp_dim"], n_actions, output_min = args['coeff_min'], output_max = args['coeff_max'])
-    target_q_network = Critic(input_dim, args["mlp_dim"], n_actions)
+    target_q1_network = Critic(input_dim, args["mlp_dim"], n_actions)
+    target_q2_network = Critic(input_dim, args["mlp_dim"], n_actions)
     target_p_network = Actor(input_dim, args["mlp_dim"], n_actions, output_min = args['coeff_min'], output_max = args['coeff_max'])
 
     p_network.to(device)
-    q_network.to(device)
-    target_q_network.to(device)
+    q1_network.to(device)
+    q2_network.to(device)
+    target_q1_network.to(device)
+    target_q2_network.to(device)
     target_p_network.to(device)
 
-    q_optimizer = torch.optim.Adam(q_network.parameters(), lr=args['lr'])
+    q1_optimizer = torch.optim.Adam(q1_network.parameters(), lr=args['lr'])
+    q2_optimizer = torch.optim.Adam(q2_network.parameters(), lr=args["lr"])
     p_optimizer = torch.optim.Adam(p_network.parameters(), lr=args["lr"])
 
     # maximum simulation time (integer)
@@ -182,15 +187,18 @@ if __name__ == "__main__":
 
     if args['optimize']:
 
-        reward, q_loss, p_loss = train(
+        reward, q1_loss, q2_loss, p_loss = train(
             sim,
             actuator,
             memory,
-            q_network,
+            q1_network,
+            q2_network,
             p_network,
-            target_q_network,
+            target_q1_network,
+            target_q2_network,
             target_p_network,
-            q_optimizer,
+            q1_optimizer,
+            q2_optimizer,
             p_optimizer,
             None,
             args["batch_size"],
@@ -214,7 +222,8 @@ if __name__ == "__main__":
         # save optimization process
         mdic = {
             'reward':reward,
-            'q-loss':q_loss,
+            'q1-loss':q1_loss,
+            'q2-loss':q2_loss,
             'p-loss':p_loss,
         }
 
@@ -223,7 +232,19 @@ if __name__ == "__main__":
             savemat(file_name = os.path.join(filepath, "process.mat"), mdict=mdic, do_compression=True)
 
         # plot the loss curve
-        plot_loss_curve(q_loss, p_loss, savepath, "loss.pdf")
+        plot_loss_curve(
+            {
+                "q1-loss":q1_loss,
+                "q2-loss":q2_loss,
+                "p-loss":p_loss,
+                
+             },
+            savepath, 
+            "loss.pdf"
+        )
+
+    else:
+        device = "cpu"
 
     # Trajectory of the system's state
     pos_list = []
@@ -239,7 +260,7 @@ if __name__ == "__main__":
     sim.reinit()
 
     # load best model
-    p_network.load_state_dict(torch.load(os.path.join(filepath, args['save_best'])))
+    p_network.load_state_dict(torch.load(os.path.join(filepath, args['save_best']), map_location = device))
     p_network.cpu()
 
     # no gradient
@@ -298,15 +319,8 @@ if __name__ == "__main__":
     E = np.array(E_list)
     PE = np.array(PE_list)
 
-    if len(coeff_cos) > 0:
-        coeff_cos = np.concatenate(coeff_cos, axis = 1)
-    else:
-        coeff_cos = 0
-
-    if len(coeff_sin) > 0:
-        coeff_sin = np.concatenate(coeff_sin, axis = 1)
-    else: 
-        coeff_sin = 0
+    coeff_cos = np.concatenate(coeff_cos, axis=1)
+    coeff_sin = np.concatenate(coeff_sin, axis=1)
 
     mdic = {
         "snapshot": snapshot,
@@ -356,7 +370,7 @@ if __name__ == "__main__":
     plot_E_k_spectrum(args['t_max'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], snapshot, savepath, "E_k_spectrum.pdf")
 
     # Fourier coefficient over time
-    plot_E_k_over_time(args['t_max'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], args['max_mode'], snapshot, savepath, "Ek_t.pdf")
+    plot_E_k_over_time(args['t_max'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], 5, snapshot, savepath, "Ek_t.pdf")
 
     # Amplitude of each external E field over time
     plot_E_k_external_over_time(args['t_max'], coeff_cos, coeff_sin, savepath, "Ek_t_external.pdf")

@@ -33,7 +33,7 @@ def parsing():
     parser.add_argument("--num_mesh", type = int, default = 250)        
     parser.add_argument("--t_min", type = float, default = 0)
     parser.add_argument("--t_max", type = float, default = 50)
-    parser.add_argument("--dt", type = float, default = 0.05)          
+    parser.add_argument("--dt", type = float, default = 0.1)          
 
     # Physical length scale and initial density
     parser.add_argument("--L", type = float, default = 50)
@@ -147,6 +147,10 @@ if __name__ == "__main__":
         "vth":args["vth"],
         "vb": args['vb'],
         "a": args['a'],
+        "cost":{
+                r"$J_{KL}$":cost_kl_list,
+                r"$J_{ee}$":cost_ee_list,
+            }
     }
 
     # save data

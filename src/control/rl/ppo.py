@@ -8,7 +8,9 @@ import numpy as np
 from collections import namedtuple, deque
 from src.env.pic import PIC
 from src.control.rl.reward import Reward
+from src.control.rl.encode import ParticleEncoder
 from src.control.actuator import E_field
+from src.interpret.spectrum import compute_E_k_spectrum
 
 torch.backends.cudnn.benchmark = True
 
@@ -20,7 +22,7 @@ Transition = namedtuple(
 
 # Function for initialization
 def hidden_init(layer: torch.nn.Linear):
-    fan_in = layer.weight.data.size()[1]
+    fan_in = layer.weight.data.size()[0]
     lim = 1.0 / np.sqrt(fan_in)
     return (-lim, lim)
 
@@ -57,7 +59,9 @@ class ActorCritic(nn.Module):
         self.x_norm = x_norm
         self.v_norm = v_norm
         
-        self.fc1 = nn.Linear(input_dim, mlp_dim)
+        self.encode = ParticleEncoder(mlp_dim, mlp_dim)
+        
+        self.fc1 = nn.Linear(mlp_dim, mlp_dim)
         self.norm1 = nn.LayerNorm(mlp_dim)
 
         self.fc2 = nn.Linear(mlp_dim, mlp_dim)
@@ -85,10 +89,8 @@ class ActorCritic(nn.Module):
         self.fc_v.weight.data.uniform_(*hidden_init(self.fc_v))
 
     def forward(self, x:torch.Tensor):
-        x_pos = x[:,:self.input_dim//2] / self.x_norm
-        x_vel = x[:,self.input_dim//2:] / self.v_norm
-        
-        z = torch.cat([x_pos, x_vel], dim=1)
+
+        z = self.encode(x)
         z = F.relu(self.norm1(self.fc1(z)))
         z = F.relu(self.norm2(self.fc2(z)))
         z = F.relu(self.norm3(self.fc3(z)))
@@ -126,7 +128,7 @@ class ActorCritic(nn.Module):
             action, _, _, _ = self.sample(state, True)
             
         return action.squeeze(0).cpu().numpy()
-    
+
 def compute_gae(
     rewards: torch.Tensor,
     values: torch.Tensor,
@@ -168,59 +170,62 @@ def update_policy(
 
     if device is None:
         device = "cpu"
-    
+
     if criterion is None:
         criterion = nn.SmoothL1Loss(reduction = "mean") # Huber Loss for critic network
-    
+
     transitions = memory.get_trajectory()
     memory.clear()
     batch = Transition(*zip(*transitions))
-    
+
     next_state_batch = torch.cat(batch.next_state).float().to(device)
     state_batch = torch.cat(batch.state).float().to(device)
     prob_a_batch = torch.cat(batch.prob_a).float().to(device)
     reward_batch = torch.cat(batch.reward).float().to(device) 
     done_batch = torch.tensor(batch.done, dtype=torch.float32, device=device)
-    
+
     with torch.no_grad():        
         _, _, values = policy_network(state_batch)
         values = values.squeeze(-1)
-        
+
         _, _, next_values = policy_network(next_state_batch)
         next_values = next_values.squeeze(-1)
-    
+
     # GAE
     advantages, returns = compute_gae(reward_batch, values, done_batch, next_values, gamma, lam)
     td_target = advantages.unsqueeze(-1)
-    
+
     # Normalized At
-    td_target = (td_target - td_target.mean()) / (td_target.std() + 1e-6)
-    
+    # td_target = (td_target - td_target.mean()) / (td_target.std() + 1e-6)
+
     loss_list = []
-    
+
     for _ in range(k_epoch):
-        
+
         policy_optimizer.zero_grad()
         _, entropy, log_probs, value = policy_network.sample(state_batch)
-        
+
         delta = td_target - value     
         ratio = torch.exp(log_probs - prob_a_batch.detach())
-        
+
         surr1 = ratio * delta
         surr2 = torch.clamp(ratio, 1 - eps_clip, 1 + eps_clip) * delta
-        loss = -torch.min(surr1, surr2) + value_coeff * criterion(value, returns.view_as(value)) - entropy_coeff * entropy
-        loss = loss.mean()
+
+        p_loss = -torch.min(surr1, surr2).mean()
+        q_loss = value_coeff * criterion(value, returns.view_as(value))
+        e_loss = -entropy_coeff * entropy
+        loss = p_loss + q_loss + e_loss
         loss.backward()
-        
+
         # Gradient clipping
         torch.nn.utils.clip_grad_norm_(policy_network.parameters(), max_norm=0.5)
-            
+
         policy_optimizer.step()
-        
+
         loss_list.append(loss.detach().cpu().numpy().item())
-    
+
     loss = np.mean(loss_list)
-    
+
     return loss
 
 def train(
@@ -251,6 +256,47 @@ def train(
 
     # Reward class
     reward_cls = Reward(env.init_dist.get_init_state(), env.N_mesh, env.L, -25.0, 25.0, env.n0, alpha, beta)
+    
+    # Reward-weighted regression for offline training of policy network
+    max_mode = policy_network.n_actions // 2
+
+    states = []
+    actions = []
+    rewards = []
+
+    for idx_t in tqdm(range(Nt), "# Offline DDPG reward-weighted regression..."):
+
+        state = env.get_state()
+        states.append(state.ravel())
+
+        _, Eks = compute_E_k_spectrum(1.0, 50.0, 50.0 / 250, 250, state, False)
+        Eks = Eks[1:max_mode + 1,:]
+        actuator.update_E((-1) * np.real(Eks), (+1) * np.imag(Eks))
+
+        action = np.concatenate([actuator.coeff_cos.ravel(), actuator.coeff_sin.ravel()])
+
+        # update state
+        env.update_state(E_external=actuator.compute_E())
+
+        actions.append(action)
+
+        # compute reward
+        reward = reward_cls.compute_reward(state, action)   
+        reward = torch.tensor([reward])
+        rewards.append(reward)
+
+    states = torch.cat([torch.tensor(state, dtype=torch.float32).unsqueeze(0) for state in states], dim = 0).to(device)
+    actions = torch.cat([torch.tensor(action, dtype=torch.float32).unsqueeze(0) for action in actions], dim = 0).to(device)
+    rewards = torch.cat(rewards).to(device)
+
+    actions_pred, _, _, _ = policy_network.sample(states)
+
+    l2 = torch.sum(((actions - actions_pred) ** 2), dim = 1)
+    l2_action = torch.sum(l2) * (-1)
+    
+    policy_optimizer.zero_grad()
+    l2_action.backward()
+    policy_optimizer.step()
     
     # Trajectory
     loss_traj = []

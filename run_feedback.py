@@ -31,11 +31,11 @@ def parsing():
     parser.add_argument("--is_save", type=bool, default=False)
 
     # PIC parameters (default)
-    parser.add_argument("--num_particle", type = int, default = 10000)  
-    parser.add_argument("--num_mesh", type = int, default = 500)        
+    parser.add_argument("--num_particle", type = int, default = 5000)  
+    parser.add_argument("--num_mesh", type = int, default = 250)        
     parser.add_argument("--t_min", type = float, default = 0)
     parser.add_argument("--t_max", type = float, default = 50)
-    parser.add_argument("--dt", type = float, default = 0.05)          
+    parser.add_argument("--dt", type = float, default = 0.1)          
 
     # Physical length scale and initial density
     parser.add_argument("--L", type = float, default = 50)
@@ -55,7 +55,7 @@ def parsing():
     parser.add_argument("--a", type = float, default = 0.2)   
 
     # Controller
-    parser.add_argument("--max_mode", type = int, default = 5)
+    parser.add_argument("--max_mode", type = int, default = 3)
     parser.add_argument("--coeff_max", type=float, default= 1.0)
     parser.add_argument("--coeff_min", type=float, default= -1.0)
 
@@ -122,6 +122,7 @@ if __name__ == "__main__":
     # Compute the cost function
     reward = Reward(sim.init_dist.get_init_state(), args['num_mesh'], args['L'], -25.0, 25.0, args['n0'], 1.0, 1.0)
 
+    reward_list = []
     cost_kl_list = []
     cost_ee_list = []
     cost_ie_list = []
@@ -159,9 +160,12 @@ if __name__ == "__main__":
         cost_ee = reward.compute_electric_energy(sim.get_state())
         cost_ie = reward.compute_input_energy(coeffs)
 
+        r = reward.compute_reward(sim.get_state(), E_external)
+
         cost_kl_list.append(cost_kl)
         cost_ee_list.append(cost_ee)
         cost_ie_list.append(cost_ie)
+        reward_list.append(r)
 
     qs = np.concatenate(pos_list, axis = 1)
     ps = np.concatenate(vel_list, axis = 1)
@@ -175,8 +179,8 @@ if __name__ == "__main__":
 
     mdic = {
         "snapshot": snapshot,
-        "E":E,
-        "PE":PE,
+        "E": E,
+        "PE": PE,
         "N": args["num_particle"],
         "N_mesh": args["num_mesh"],
         "n0": args["n0"],
@@ -184,13 +188,18 @@ if __name__ == "__main__":
         "dt": args["dt"],
         "tmin": args["t_min"],
         "tmax": args["t_max"],
-        "n_mode": args['n_mode'],
-        "A": args['A'],
-        "vth":args["vth"],
-        "vb": args['vb'],
-        "a": args['a'],
-        "coeff_cos":coeff_cos,
-        "coeff_sin":coeff_sin,
+        "n_mode": args["n_mode"],
+        "A": args["A"],
+        "vth": args["vth"],
+        "vb": args["vb"],
+        "a": args["a"],
+        "coeff_cos": coeff_cos,
+        "coeff_sin": coeff_sin,
+        "cost": {
+            r"$J_{KL}$": cost_kl_list,
+            r"$J_{ee}$": cost_ee_list,
+            r"$J_{ie}$": cost_ie_list,
+        },
     }
 
     # save data
@@ -214,7 +223,7 @@ if __name__ == "__main__":
     plot_E_k_spectrum(args['t_max'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], snapshot, savepath, "Ek_spectrum.pdf")
 
     # Fourier coefficient over time
-    plot_E_k_over_time(args['t_max'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], args['max_mode'], snapshot, savepath, "Ek_t.pdf")
+    plot_E_k_over_time(args['t_max'], args['L'], args['L'] / args['num_mesh'], args['num_mesh'], 5, snapshot, savepath, "Ek_t.pdf")
 
     # Amplitude of each external E field over time
     plot_E_k_external_over_time(args['t_max'], coeff_cos, coeff_sin, savepath, "Ek_t_external.pdf")
