@@ -1,0 +1,12 @@
+cff-version: 1.0.0
+message: "If you use this software, please cite our article and repository."
+authors:
+  - family-names: "Kim"
+    given-names: "Jinsu"
+    orcid: "https://orcid.org/0009-0000-2610-4551"
+title: "Optimal control for instability suppression in an electrostatic plasma with reinforcement learning"
+version: "1.0.0"
+doi: ""  # Replace with your DOI
+url: "https://github.com/ZINZINBIN/Optimal-Control-1D-Electrostatic-Plasma"
+date-released: "2025-12-12"
+license: "MIT"
