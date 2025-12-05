@@ -324,8 +324,8 @@ if __name__ == "__main__":
 
     mdic = {
         "snapshot": snapshot,
-        "E":E,
-        "PE":PE,
+        "E": E,
+        "PE": PE,
         "N": args["num_particle"],
         "N_mesh": args["num_mesh"],
         "n0": args["n0"],
@@ -333,13 +333,18 @@ if __name__ == "__main__":
         "dt": args["dt"],
         "tmin": args["t_min"],
         "tmax": args["t_max"],
-        "n_mode": args['n_mode'],
-        "A": args['A'],
-        "vth":args["vth"],
-        "vb": args['vb'],
-        "a": args['a'],
-        "coeff_cos":coeff_cos,
-        "coeff_sin":coeff_sin,
+        "n_mode": args["n_mode"],
+        "A": args["A"],
+        "vth": args["vth"],
+        "vb": args["vb"],
+        "a": args["a"],
+        "coeff_cos": coeff_cos,
+        "coeff_sin": coeff_sin,
+        "cost": {
+            r"$J_{KL}$": cost_kl_list,
+            r"$J_{ee}$": cost_ee_list,
+            r"$J_{ie}$": cost_ie_list,
+        },
     }
 
     # save data
